@@ -967,7 +967,36 @@ class MSatConverter(Converter, DagWalker):
         return res
 
     def walk_div(self, formula, args, **kwargs):
-        return self._msat_lib.msat_make_divide(self.msat_env(), args[0], args[1])
+        if self.env.stc.get_type(formula).is_real_type():
+            return self._msat_lib.msat_make_divide(self.msat_env(), args[0], args[1])
+
+        # MathSAT uses weird semantics for integer division, so we
+        # need to emulate the standard one here.
+        #
+        # Taken from: https://github.com/sosy-lab/java-smt/blob/master/src/org/sosy_lab/java_smt/solvers/mathsat5/Mathsat5IntegerFormulaManager.java#L66
+        minus_one = self._msat_lib.msat_make_number(self.msat_env(), "-1")
+        zero = self._msat_lib.msat_make_number(self.msat_env(), "0")
+        div = self._msat_lib.msat_make_divide(self.msat_env(), args[0], args[1])
+        floor_num = self._msat_lib.msat_make_floor(self.msat_env(), div)
+        ceil_num = self._msat_lib.msat_make_times(
+            self.msat_env(),
+            self._msat_lib.msat_make_floor(
+                self.msat_env(),
+                self._msat_lib.msat_make_times(self.msat_env(), div, minus_one),
+            ),
+            minus_one,
+        )
+
+        return self._msat_lib.msat_make_term_ite(
+            self.msat_env(),
+            self._msat_lib.msat_make_leq(
+                self.msat_env(),
+                args[1],
+                zero,
+            ),
+            ceil_num,
+            floor_num,
+        )
 
     def walk_minus(self, formula, args, **kwargs):
         n_one = self._msat_lib.msat_make_number(self.msat_env(), "-1")
