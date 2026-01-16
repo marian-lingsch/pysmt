@@ -1214,7 +1214,7 @@ class MSatInterpolator(Interpolator):
 
     __lib_name__ = "mathsat"
 
-    LOGICS = [QF_UFLIA, QF_UFLRA, QF_BV]
+    LOGICS = [QF_UFLIA, QF_UFLRA, QF_BV, QF_ALIA]
 
     def __init__(self, environment, logic=None):
         Interpolator.__init__(self)
