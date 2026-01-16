@@ -19,7 +19,7 @@ from warnings import warn
 
 from pysmt.constants import Fraction, is_pysmt_fraction, is_pysmt_integer
 
-from pysmt.logics import LRA, LIA, QF_UFLIA, QF_UFLRA, QF_BV, PYSMT_QF_LOGICS
+from pysmt.logics import LRA, LIA, QF_UFLIA, QF_UFLRA, QF_BV, PYSMT_QF_LOGICS, QF_ALIA
 from pysmt.oracles import get_logic
 
 from pysmt.solvers.dynmsat import MSATLibLoader, MSATCreateEnv, MSATCreateConverter
