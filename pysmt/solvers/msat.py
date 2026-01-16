@@ -404,6 +404,7 @@ class MSatConverter(Converter, DagWalker):
             self._msat_lib.MSAT_TAG_EQ:  self._back_adapter(self.mgr.Equals),
             self._msat_lib.MSAT_TAG_LEQ: self._back_adapter(self.mgr.LE),
             self._msat_lib.MSAT_TAG_PLUS: self._back_adapter(self.mgr.Plus),
+            self._msat_lib.MSAT_TAG_DIVIDE: self._back_adapter(self.mgr.Div),
             self._msat_lib.MSAT_TAG_TIMES: self._back_adapter(self.mgr.Times),
             self._msat_lib.MSAT_TAG_BV_MUL: self._back_adapter(self.mgr.BVMul),
             self._msat_lib.MSAT_TAG_BV_ADD: self._back_adapter(self.mgr.BVAdd),
@@ -459,6 +460,7 @@ class MSatConverter(Converter, DagWalker):
             self._msat_lib.MSAT_TAG_EQ: self._sig_most_generic_bool_binary,
             self._msat_lib.MSAT_TAG_LEQ: self._sig_most_generic_bool_binary,
             self._msat_lib.MSAT_TAG_PLUS:  self._sig_most_generic_bool_binary,
+            self._msat_lib.MSAT_TAG_DIVIDE: self._sig_most_generic_bool_binary,
             self._msat_lib.MSAT_TAG_TIMES: self._sig_most_generic_bool_binary,
             self._msat_lib.MSAT_TAG_BV_MUL: self._sig_binary,
             self._msat_lib.MSAT_TAG_BV_ADD: self._sig_binary,
@@ -963,6 +965,9 @@ class MSatConverter(Converter, DagWalker):
         for a in args:
             res = self._msat_lib.msat_make_plus(self.msat_env(), res, a)
         return res
+
+    def walk_div(self, formula, args, **kwargs):
+        return self._msat_lib.msat_make_divide(self.msat_env(), args[0], args[1])
 
     def walk_minus(self, formula, args, **kwargs):
         n_one = self._msat_lib.msat_make_number(self.msat_env(), "-1")
