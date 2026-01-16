@@ -176,7 +176,7 @@ class MathSAT5Solver(IncrementalTrackingSolver, UnsatCoreSolver,
 
     LOGICS = PYSMT_QF_LOGICS -\
              set(l for l in PYSMT_QF_LOGICS \
-                 if not l.theory.linear or l.theory.strings)
+                 if l.theory.strings)
 
     OptionsClass = MathSATOptions
 
@@ -988,12 +988,7 @@ class MSatConverter(Converter, DagWalker):
         res = args[0]
         nl_count = 0 if self._msat_lib.msat_term_is_number(self.msat_env(), res) else 1
         for x in args[1:]:
-            if not self._msat_lib.msat_term_is_number(self.msat_env(), x):
-                nl_count += 1
-            if nl_count >= 2:
-                raise NonLinearError(formula)
-            else:
-                res = self._msat_lib.msat_make_times(self.msat_env(), res, x)
+            res = self._msat_lib.msat_make_times(self.msat_env(), res, x)
         return res
 
     def walk_function(self, formula, args, **kwargs):
