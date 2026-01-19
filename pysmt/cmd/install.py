@@ -32,11 +32,11 @@ from pysmt import __version__ as pysmt_version
 Installer = namedtuple("Installer",
                        ["InstallerClass", "version", "extra_params"])
 INSTALLERS = [
-    Installer(MSatInstaller,    "5.6.10", {}),
+    Installer(MSatInstaller,    "5.6.15", {}),
     Installer(CVC5Installer,    "1.1.2", {}),
     Installer(CVC4Installer,    "1.7-prerelease",
               {"git_version" : "391ab9df6c3fd9a3771864900c1718534c1e4666"}),
-    Installer(Z3Installer,      "4.15.0", {}),
+    Installer(Z3Installer,      "4.15.4", {}),
     Installer(YicesInstaller,   "2.6.4", {"yices_api_version": "1.1.5"}),
     Installer(BtorInstaller,    "3.2.3", {}),
     Installer(PicoSATInstaller, "965",
