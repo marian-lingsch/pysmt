@@ -1305,6 +1305,10 @@ class MSatInterpolator(Interpolator):
             pysmt_ret = []
             for i in range(1, len(groups)):
                 itp = self._msat_lib.msat_get_interpolant(env, groups[:i])
+                if self._msat_lib.MSAT_ERROR_TERM(itp):
+                    raise InternalSolverError(
+                        "Error in mathsat interpolation: %s" %
+                        self._msat_lib.msat_last_error_message(env))
                 f = self.converter.back(itp)
                 pysmt_ret.append(f)
 
