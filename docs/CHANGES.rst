@@ -1,6 +1,44 @@
 Change Log
 ==========
 
+(unreleased)
+------------
+
+* BDD: Upgrade to repycudd 3.0.1, which bundles CUDD 3.0.0 in place of
+  2.4.2 and builds with pip on Linux and 64-bit Windows.
+  ``pysmt-install --bdd`` now works on Windows (it needs the Microsoft
+  C++ Build Tools), and no longer needs ``make`` or a system SWIG on
+  Linux. The repycudd API that pysmt uses is unchanged. Results that
+  depend on CUDD's heuristics, such as BDD sizes after reordering, may
+  differ.
+
+* Fixed: MathSAT segfaulted in ``get_unsat_core()`` after solving under
+  a non-literal assumption, because reading the core popped the
+  assumption level and left MathSAT's core with dangling terms. Z3 did
+  not crash but reported an internal symbol in place of the assumption,
+  and raised on a second core request. Both now report the assumption
+  itself.
+
+* Fixed: The assumptions passed to ``solve()`` were missing from the
+  unsat core. ``get_unsat_core()`` now reports them alongside the
+  assertions, in both the "all" and the "named" unsat cores mode
+  (PR #680).
+
+  Assumptions carry no name, so they are *not* reported by
+  ``get_named_unsat_core()``, which keeps returning only the
+  assertions added via ``add_assertion(..., named=...)``.
+
+* Fixed: Boolector's ``get_unsat_core`` and ``get_named_unsat_core``
+  raised ``BoolectorException: 'exp' must be an assumption`` when
+  solving under assumptions, and ``get_named_unsat_core`` could pair a
+  name with the wrong assertion (PR #680).
+
+* Fixed: Boolector dropped the assumptions passed to ``solve()`` when
+  they were given as an iterator rather than as a list (PR #680).
+
+* Docs: README listed Boolector as not supporting unsat cores; it does.
+
+
 0.9.6: 2022-06-24 -- CVC5 and upgraded solvers
 ----------------------------------------------
 

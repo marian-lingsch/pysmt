@@ -18,11 +18,13 @@
 from enum import Enum
 import inspect
 from math import log, ceil
+from typing import Dict, Set
 
 from pysmt.exceptions import SolverAPINotFound
+from pysmt.fnode import FNode
 
 try:
-    import pyboolector
+    import pyboolector # type: ignore[import]
 
     # Fixing interface for cython 3.1+
     #
@@ -189,8 +191,7 @@ class BoolectorOptions(SolverOptions):
 # EOC BoolectorOptions
 
 
-class BoolectorSolver(IncrementalTrackingSolver, UnsatCoreSolver,
-                      SmtLibBasicSolver, SmtLibIgnoreMixin):
+class BoolectorSolver(IncrementalTrackingSolver, UnsatCoreSolver, SmtLibBasicSolver):
 
     LOGICS = [QF_BV, QF_UFBV, QF_ABV, QF_AUFBV, QF_AX] + \
         list(filter(lambda l: l.name in {
@@ -208,6 +209,9 @@ class BoolectorSolver(IncrementalTrackingSolver, UnsatCoreSolver,
         self.mgr = environment.formula_manager
         self.declarations = {}
         self._named_assertions = {}
+        self._assumptions = []
+        self._core = []
+        self._core_assumptions = []
         return
 
 # EOC BoolectorOptions
@@ -245,17 +249,34 @@ class BoolectorSolver(IncrementalTrackingSolver, UnsatCoreSolver,
             assignment[s] = self.get_value(s)
         return EagerModel(assignment=assignment, environment=self.environment)
 
+    def _failed(self, formulae):
+        """Returns the formulae of the given list that are in the unsat core.
+
+        Only valid immediately after an UNSAT Sat() call: Boolector
+        drops this information as soon as new assumptions are made.
+        """
+        if len(formulae) == 0:
+            return []
+        terms = [self.converter.convert(f) for f in formulae]
+        return [f for f, failed in zip(formulae, self.btor.Failed(*terms)) if failed]
+
     @clear_pending_pop
     def _solve(self, assumptions=None):
-        if assumptions is not None:
-            btor_assumptions = [self.converter.convert(a) for a in assumptions]
-            self.btor.Assume(*btor_assumptions)
+        # materialized because assumptions can be a one-shot iterator
+        self._assumptions = [] if assumptions is None else list(assumptions)
+        if len(self._assumptions) > 0:
+            self.btor.Assume(*(self.converter.convert(a)
+                               for a in self._assumptions))
 
         res = self.btor.Sat()
 
-        # need to re-add assumptions if in unsat-core mode
-        # which uses Assume instead of Assert
         if self.options.unsat_cores_mode is not None:
+            if res == self.btor.UNSAT:
+                # must be extracted before the re-assertion below invalidates it
+                self._core = self._failed(self._assertion_stack)
+                self._core_assumptions = self._failed(self._assumptions)
+            # need to re-add assumptions if in unsat-core mode
+            # which uses Assume instead of Assert
             for a in self._assertion_stack:
                 self._add_assertion(a)
 
@@ -266,42 +287,27 @@ class BoolectorSolver(IncrementalTrackingSolver, UnsatCoreSolver,
         else:
             raise SolverReturnedUnknownResultError
 
-    def get_unsat_core(self):
+    def get_unsat_core(self) -> Set[FNode]:
         """After a call to solve() yielding UNSAT, returns the unsat core as a
         set of formulae"""
         self._check_unsat_core_config()
 
         if self.options.unsat_cores_mode == 'all':
-            unsat_core = set()
-            # relies on this assertion stack being ordered
-            assert isinstance(self._assertion_stack, list)
-            btor_assertions = [self.converter.convert(
-                a) for a in self._assertion_stack]
-            in_unsat_core = self.btor.Failed(*btor_assertions)
-            for a, in_core in zip(self._assertion_stack, in_unsat_core):
-                if in_core:
-                    unsat_core.add(a)
-            return unsat_core
+            return set(self._core) | set(self._core_assumptions)
         else:
-            return self.get_named_unsat_core().values()
+            return set(self.get_named_unsat_core().values()) | \
+                set(self._core_assumptions)
 
-    def get_named_unsat_core(self):
+    def get_named_unsat_core(self) -> Dict[str, FNode]:
         """After a call to solve() yielding UNSAT, returns the unsat core as a
         dict of names to formulae"""
         self._check_unsat_core_config()
 
         if self.options.unsat_cores_mode == "named":
-            unsat_core = {}
-            # relies on this assertion stack being ordered
-            assert isinstance(self._assertion_stack, list)
-            btor_named_assertions = [self.converter.convert(
-                a) for a in self._named_assertions.keys()]
-            in_unsat_core = self.btor.Failed(*btor_named_assertions)
-            for a, in_core in zip(self._assertion_stack, in_unsat_core):
-                if in_core:
-                    name = self._named_assertions[a]
-                    unsat_core[name] = a
-            return unsat_core
+            # solve-time assumptions have no name, they are reported by
+            # get_unsat_core() only
+            return dict((self._named_assertions[a], a) for a in self._core
+                        if a in self._named_assertions)
         else:
             return dict(("_a%d" % i, f)
                         for i, f in enumerate(self.get_unsat_core()))
@@ -321,7 +327,7 @@ class BoolectorSolver(IncrementalTrackingSolver, UnsatCoreSolver,
 
     def get_value(self, item):
         self._assert_no_function_type(item)
-        itype = item.get_type()
+        itype = self.environment.stc.get_type(item)
         titem = self.converter.convert(item)
 
         def _back_bv_func(width):

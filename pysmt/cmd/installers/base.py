@@ -23,6 +23,7 @@ import urllib.request
 
 from contextlib import contextmanager
 from setuptools import Distribution
+from typing import Optional
 
 from urllib.error import HTTPError, URLError
 
@@ -40,7 +41,7 @@ def TemporaryPath(path):
 
 class SolverInstaller(object):
 
-    SOLVER = None
+    SOLVER: Optional[str] = None
 
     def __init__(self, install_dir, bindings_dir, solver_version,
                  archive_name=None, native_link=None, mirror_link=None):
@@ -196,8 +197,9 @@ class SolverInstaller(object):
         if sys.executable:
             interpreter = sys.executable
 
-        cmd = '{interpreter} {script}'.format(interpreter=interpreter,
-                                              script=script)
+        if isinstance(script, str):
+            script = script.split()
+        cmd = [interpreter] + script
         return SolverInstaller.run(cmd, directory=directory,
                                    env_variables=env_variables,
                                    get_output=get_output)
@@ -229,6 +231,16 @@ class SolverInstaller(object):
                                   cwd=directory, stderr=stderr)
             if suppress_stderr:
                 stderr.close()
+
+
+    @staticmethod
+    def replace_in_file(file_path, old_str, new_str):
+        """Replaces all occurrences of old_str with new_str in the given file"""
+        with open(file_path, "r") as f:
+            content = f.read()
+        content = content.replace(old_str, new_str)
+        with open(file_path, "w") as f:
+            f.write(content)
 
 
     @staticmethod
@@ -285,7 +297,7 @@ class SolverInstaller(object):
                 env[k] = bindings_dir
 
         try:
-            output = self.run_python("%s %s" % (check_version_script, package),
+            output = self.run_python([check_version_script, package],
                                      env_variables=env,
                                      get_output=True)
             output = output.strip()

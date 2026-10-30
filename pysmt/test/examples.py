@@ -18,12 +18,12 @@
 from collections import namedtuple
 
 import pysmt.logics
-from pysmt.environment import get_env
+from pysmt.environment import get_env, Environment
 from pysmt.shortcuts import (Symbol, Function,
                              Int, Real, FALSE, TRUE,
                              And, Iff, Or, Not, Implies, Ite,
                              LT, LE, GT, GE,
-                             Times, Pow, Equals, Plus, Minus, Div, ToReal,
+                             Times, Pow, Equals, Plus, Minus, Div, ToReal, ToInt,
                              ForAll, Exists,
                              BV, SBV, BVOne, BVZero,
                              BVNot, BVAnd, BVOr, BVXor,
@@ -42,21 +42,23 @@ from pysmt.shortcuts import (Symbol, Function,
 from pysmt.typing import REAL, BOOL, INT, BV8, BV16, BVType, ARRAY_INT_INT
 from pysmt.typing import FunctionType, ArrayType, STRING
 from pysmt.constants import Fraction
+from typing import List, Optional
 
 
 Example = namedtuple('Example',
                      ['hr', 'expr', 'is_valid', 'is_sat', 'logic'])
 
-SExample = namedtuple('SimpleExample',
+SimpleExample = namedtuple('SimpleExample',
                       ['expr', 'is_valid', 'is_sat', 'logic'])
 
 
-def get_full_example_formulae(environment=None):
+def get_full_example_formulae(environment: Optional[Environment]=None) -> List[Example]:
     """Return a list of Examples using the given environment."""
 
     if environment is None:
         environment = get_env()
 
+    assert environment is not None
     with environment:
         x = Symbol("x", BOOL)
         y = Symbol("y", BOOL)
@@ -696,6 +698,32 @@ def get_full_example_formulae(environment=None):
                     is_sat=False,
                     logic=pysmt.logics.QF_UFLIRA
                 ),
+
+            # ToInt is the floor, hence it rounds towards minus infinity
+            Example(hr="((r = -3/2) -> (ToInt(r) = -2))",
+                    expr=Implies(Equals(r, Real(Fraction(-3, 2))),
+                                 Equals(ToInt(r), Int(-2))),
+                    is_valid=True,
+                    is_sat=True,
+                    logic=pysmt.logics.QF_LIRA
+                ),
+
+            # ToInt must not truncate towards zero
+            Example(hr="((r = -3/2) & (ToInt(r) = -1))",
+                    expr=And(Equals(r, Real(Fraction(-3, 2))),
+                             Equals(ToInt(r), Int(-1))),
+                    is_valid=False,
+                    is_sat=False,
+                    logic=pysmt.logics.QF_LIRA
+                ),
+
+            Example(hr="((ToInt(r) = p) & (0.0 < r))",
+                    expr=And(Equals(ToInt(r), p),
+                             GT(r, Real(0))),
+                    is_valid=False,
+                    is_sat=True,
+                    logic=pysmt.logics.QF_LIRA
+                ),
             #
             # STR
             #
@@ -897,8 +925,8 @@ def get_full_example_formulae(environment=None):
                     logic=pysmt.logics.QF_NRA
                 ),
 
-            Example(hr="(2.0 = (r * r))",
-                    expr=Equals(Real(2), Times(r,r)),
+            Example(hr="(4.0 = (r * r))",
+                    expr=Equals(Real(4), Times(r,r)),
                     is_valid=False,
                     is_sat=True,
                     logic=pysmt.logics.QF_NRA
@@ -918,8 +946,8 @@ def get_full_example_formulae(environment=None):
                     logic=pysmt.logics.QF_NRA
                 ),
 
-            Example(hr="((r * r * r) = 25.0)",
-                    expr=Equals(Times(r, r, r), Real(25)),
+            Example(hr="((r * r * r) = 27.0)",
+                    expr=Equals(Times(r, r, r), Real(27)),
                     is_valid=False,
                     is_sat=True,
                     logic=pysmt.logics.QF_NRA
@@ -995,13 +1023,13 @@ def get_full_example_formulae(environment=None):
     return result
 
 
-def get_example_formulae(environment=None):
+def get_example_formulae(environment: Optional["pysmt.environment.Environment"]=None):
     """Generates a stream of SExample using the given environment."""
     for (hr, expr, is_valid, is_sat, logic) in get_full_example_formulae(environment):
-        yield SExample(expr, is_valid, is_sat, logic)
+        yield SimpleExample(expr, is_valid, is_sat, logic)
 
 
-def get_str_example_formulae(environment=None):
+def get_str_example_formulae(environment: Optional["pysmt.environment.Environment"]=None):
     """Returns a triple from each Example."""
     for (hr, expr, is_valid, is_sat, logic) in get_full_example_formulae(environment):
         yield (hr, expr, logic)

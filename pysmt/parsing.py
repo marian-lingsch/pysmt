@@ -17,14 +17,17 @@
 #
 import re
 from collections import namedtuple
+from typing import List, Optional
 
+import pysmt
 import pysmt.typing as types
 from pysmt.environment import get_env
-from pysmt.exceptions import PysmtSyntaxError, UndefinedSymbolError
+from pysmt.exceptions import (PysmtSyntaxError, UndefinedSymbolError,
+                             PysmtEmptySymbolNameError)
 from pysmt.constants import Fraction
 
 
-def HRParser(env=None):
+def HRParser(env: Optional["pysmt.environment.Environment"]=None):
     """Parser for HR format of pySMT."""
     return PrattParser(HRLexer, env=env)
 
@@ -45,14 +48,14 @@ class Lexer(object):
     modifying rules.
     """
 
-    def __init__(self, env=None):
+    def __init__(self, env: Optional["pysmt.environment.Environment"]=None):
         if env is None:
             env = get_env()
         self.env = env
         self.mgr = env.formula_manager
         self.get_type = env.stc.get_type
 
-        self.rules = []
+        self.rules: List[Rule] = []
         self.scanner = None
         self.eoi = EndOfInput()
 
@@ -114,7 +117,7 @@ class GrammarSymbol(object):
 class HRLexer(Lexer):
     """Produces a stream of token objects for the Human-Readable format."""
 
-    def __init__(self, env=None):
+    def __init__(self, env: Optional["pysmt.environment.Environment"]=None):
         Lexer.__init__(self, env=env)
 
         hr_rules = [
@@ -197,6 +200,8 @@ class HRLexer(Lexer):
             "ZEXT": InfixOpAdapter(self.BVHack(self.mgr.BVZExt), 90),# BVZext
             "SEXT": InfixOpAdapter(self.BVHack(self.mgr.BVSExt), 90),# BVSext
             "ToReal": UnaryOpAdapter(self.mgr.ToReal, 100),#
+            "ToInt": UnaryOpAdapter(self.mgr.ToInt, 100),#
+            "IsInt": UnaryOpAdapter(self.mgr.IsInt, 100),#
             "Int": IntTypeTok(),# Int Type
             "Real": RealTypeTok(),# Real Type
             "Bool": BoolTypeTok(),# Bool Type
@@ -302,7 +307,7 @@ class BVTypeTok(GrammarSymbol):
         self.width = width
 
     def nud(self, parser):
-        return types.BVType(self.width)
+        return parser.env.type_manager.BVType(self.width)
 
 class IntTypeTok(GrammarSymbol):
     def nud(self, parser):
@@ -328,6 +333,9 @@ class Constant(GrammarSymbol):
 class Identifier(GrammarSymbol):
     def __init__(self, name, env):
         GrammarSymbol.__init__(self)
+        if name == "" and not env.allow_empty_var_names:
+            # Otherwise this would be reported as an undefined symbol
+            raise PysmtEmptySymbolNameError()
         self.value = env.formula_manager.get_symbol(name)
         if self.value is None:
             raise UndefinedSymbolError(name)
@@ -365,7 +373,7 @@ class OpenArrayTypeTok(GrammarSymbol):
             parser.expect(ClosePar, ")")
             return parser.mgr.Array(idx_type, default)
         else:
-            return types.ArrayType(idx_type, el_type)
+            return parser.env.type_manager.ArrayType(idx_type, el_type)
 
 
 class OpenPar(GrammarSymbol):
@@ -455,7 +463,7 @@ class PrattParser(object):
     The LexerClass is required, and is the one doing the heavy lifting.
     """
 
-    def __init__(self, LexerClass, env=None):
+    def __init__(self, LexerClass, env: Optional["pysmt.environment.Environment"]=None):
         if env is None:
             env = get_env()
 

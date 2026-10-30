@@ -23,6 +23,8 @@ from pysmt.shortcuts import reset_env
 from pysmt.test import TestCase
 from pysmt.smtlib.parser import SmtLibParser
 from pysmt.exceptions import PysmtSyntaxError
+from pysmt.smtlib.script import SmtLibScript
+from typing import Iterator, List, Tuple
 
 
 class TestSmtLibParserOMT(TestCase):
@@ -61,7 +63,140 @@ class TestSmtLibParserOMT(TestCase):
             self.assertEqual(cmd.name, command)
             self.assertEqual(len(cmd.args), len_args)
 
-    def parse_from_file(self, file_id):
+    def test_parse_minmax_maxmin_with_options(self):
+        parser = SmtLibParser()
+
+        script = parser.get_script(StringIO(
+            "(declare-fun x () Real)\n"
+            "(declare-fun y () Real)\n"
+            "(minmax x y :id g1 :signed)\n"
+        ))
+        cmd = script.commands[-1]
+        self.assertEqual(cmd.name, "minmax")
+        self.assertEqual(cmd.args[1], [(':id', 'g1'), (':signed', True)])
+
+        buf = StringIO()
+        script.serialize(buf)
+        self.assertIn("(minmax x y :id g1 :signed)", buf.getvalue())
+
+        script = parser.get_script(StringIO(
+            "(declare-fun x () Real)\n"
+            "(declare-fun y () Real)\n"
+            "(maxmin x y :id g2)\n"
+        ))
+        cmd = script.commands[-1]
+        self.assertEqual(cmd.name, "maxmin")
+        self.assertEqual(cmd.args[1], [(':id', 'g2'), (':signed', False)])
+
+    def test_parse_minmax_maxmin_signed_only(self):
+        parser = SmtLibParser()
+
+        script = parser.get_script(StringIO(
+            "(declare-fun x () Real)\n"
+            "(declare-fun y () Real)\n"
+            "(maxmin x y :signed)\n"
+        ))
+        cmd = script.commands[-1]
+        self.assertEqual(cmd.name, "maxmin")
+        self.assertEqual(cmd.args[1], [(':signed', True)])
+
+        buf = StringIO()
+        script.serialize(buf)
+        self.assertIn("(maxmin x y :signed)", buf.getvalue())
+
+    def test_parse_minmax_maxmin_invalid_option(self):
+        parser = SmtLibParser()
+        with self.assertRaises(PysmtSyntaxError):
+            parser.get_script(StringIO(
+                "(declare-fun x () Real)\n"
+                "(declare-fun y () Real)\n"
+                "(minmax x y :foo 1)\n"
+            ))
+
+    def test_parse_minmax_multiple_terms_with_options(self):
+        parser = SmtLibParser()
+
+        script = parser.get_script(StringIO(
+            "(declare-fun x () Real)\n"
+            "(declare-fun y () Real)\n"
+            "(declare-fun z () Real)\n"
+            "(minmax x y z :id g1 :signed)\n"
+        ))
+        cmd = script.commands[-1]
+        self.assertEqual(cmd.name, "minmax")
+        self.assertEqual([term.symbol_name() for term in cmd.args[0]], ['x', 'y', 'z'])
+        self.assertEqual(cmd.args[1], [(':id', 'g1'), (':signed', True)])
+
+        buf = StringIO()
+        script.serialize(buf)
+        self.assertIn("(minmax x y z :id g1 :signed)", buf.getvalue())
+
+    def test_parse_minmax_option_order(self):
+        parser = SmtLibParser()
+
+        script = parser.get_script(StringIO(
+            "(declare-fun x () Real)\n"
+            "(declare-fun y () Real)\n"
+            "(maxmin x y :signed :id g2)\n"
+        ))
+        cmd = script.commands[-1]
+        self.assertEqual(cmd.name, "maxmin")
+        self.assertEqual(cmd.args[1], [(':signed', True), (':id', 'g2')])
+
+        buf = StringIO()
+        script.serialize(buf)
+        self.assertIn("(maxmin x y :signed :id g2)", buf.getvalue())
+
+    def test_parse_minmax_reverse_option_order(self):
+        parser = SmtLibParser()
+
+        script = parser.get_script(StringIO(
+            "(declare-fun x () Real)\n"
+            "(declare-fun y () Real)\n"
+            "(minmax x y :signed :id g1)\n"
+        ))
+        cmd = script.commands[-1]
+        self.assertEqual(cmd.name, "minmax")
+        self.assertEqual(cmd.args[1], [(':signed', True), (':id', 'g1')])
+
+        buf = StringIO()
+        script.serialize(buf)
+        self.assertIn("(minmax x y :signed :id g1)", buf.getvalue())
+
+    def test_parse_minmax_maxmin_syntax_errors(self):
+        parser = SmtLibParser()
+        with self.assertRaises(PysmtSyntaxError):
+            parser.get_script(StringIO(
+                "(declare-fun x () Real)\n"
+                "(declare-fun y () Real)\n"
+                "(minmax x y :id)\n"
+            ))
+        with self.assertRaises(PysmtSyntaxError):
+            parser.get_script(StringIO(
+                "(declare-fun x () Real)\n"
+                "(declare-fun y () Real)\n"
+                "(maxmin x y :signed true)\n"
+            ))
+
+    def test_parse_minmax_maxmin_round_trip(self):
+        parser = SmtLibParser()
+        txt = """(declare-fun x () Real)
+(declare-fun y () Real)
+(minmax x y :id g1 :signed)
+(maxmin x y :signed :id g2)
+"""
+        script = parser.get_script(StringIO(txt))
+
+        buf = StringIO()
+        script.serialize(buf)
+        new_script = parser.get_script(StringIO(buf.getvalue()))
+
+        self.assertEqual(script.commands[-2].name, new_script.commands[-2].name)
+        self.assertEqual(script.commands[-2].args[1], new_script.commands[-2].args[1])
+        self.assertEqual(script.commands[-1].name, new_script.commands[-1].name)
+        self.assertEqual(script.commands[-1].args[1], new_script.commands[-1].args[1])
+
+    def parse_from_file(self, file_id: int) -> SmtLibScript:
         fname = OMT_FILE_PATTERN % file_id
         reset_env()
         parser = SmtLibParser()
@@ -69,13 +204,13 @@ class TestSmtLibParserOMT(TestCase):
         self.assertIsNotNone(script)
         return script
 
-    def examples(self):
+    def examples(self) -> Iterator[Tuple[int, List[str], SmtLibScript]]:
         for file_id in TEST_FILES:
             script = self.parse_from_file(file_id)
             yield file_id, TEST_FILES[file_id], script
 
     @staticmethod
-    def snippet_examples():
+    def snippet_examples() -> Iterator[Tuple[str, str, int]]:
         for input_command, command, len_args in TEST_SNIPPETS:
             yield input_command, command, len_args
 

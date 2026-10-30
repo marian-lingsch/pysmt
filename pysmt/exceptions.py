@@ -18,6 +18,7 @@
 """This module contains all custom exceptions of pySMT."""
 
 import pysmt.operators as op
+from typing import Optional, Tuple
 
 
 class PysmtException(Exception):
@@ -130,11 +131,21 @@ class PysmtImportError(PysmtException, ImportError):
 class PysmtValueError(PysmtException, ValueError):
     pass
 
+class PysmtEmptySymbolNameError(PysmtValueError):
+    """A symbol with the empty name was built, but they are not enabled."""
+
+    def __init__(self):
+        PysmtValueError.__init__(
+            self,
+            "The empty string is not a valid symbol name. SMT-LIB allows it "
+            "(as `||`), but not every solver does, so pySMT requires it to be "
+            "enabled explicitly by setting `env.allow_empty_var_names = True`.")
+
 class PysmtTypeError(PysmtException, TypeError):
     pass
 
 class PysmtSyntaxError(PysmtException, SyntaxError):
-    def __init__(self, message, pos_info=None):
+    def __init__(self, message: str, pos_info: Optional[Tuple[int, int]]=None):
         super(PysmtSyntaxError, self).__init__(message)
         self.pos_info = pos_info
         self.message = message

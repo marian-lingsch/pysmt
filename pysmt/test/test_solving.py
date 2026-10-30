@@ -198,7 +198,6 @@ class TestBasic(TestCase):
     def test_examples_msat(self):
         for (f, validity, satisfiability, logic) in get_example_formulae():
             if not logic.quantifier_free: continue
-            if not logic.theory.linear: continue
             if logic.theory.strings: continue
 
             v = is_valid(f, solver_name='msat', logic=logic)
@@ -209,10 +208,25 @@ class TestBasic(TestCase):
     @skipIfSolverNotAvailable("cvc5")
     def test_examples_cvc(self):
         for (f, validity, satisfiability, logic) in get_example_formulae():
-            if logic.theory.arrays_const: continue
             try:
                 v = is_valid(f, solver_name='cvc5', logic=logic)
                 s = is_sat(f, solver_name='cvc5', logic=logic)
+                self.assertEqual(validity, v, f)
+                self.assertEqual(satisfiability, s, f)
+            except SolverReturnedUnknownResultError:
+                # CVC does not handle quantifiers in a complete way
+                self.assertFalse(logic.quantifier_free)
+            except NoSolverAvailableError:
+                # Logic is not supported by CVC
+                pass
+
+    @skipIfSolverNotAvailable("cvc4")
+    def test_examples_cvc4(self):
+        for (f, validity, satisfiability, logic) in get_example_formulae():
+            if not logic.theory.linear: continue
+            try:
+                v = is_valid(f, solver_name='cvc4', logic=logic)
+                s = is_sat(f, solver_name='cvc4', logic=logic)
                 self.assertEqual(validity, v, f)
                 self.assertEqual(satisfiability, s, f)
             except SolverReturnedUnknownResultError:
@@ -293,7 +307,7 @@ class TestBasic(TestCase):
 
     @skipIfSolverNotAvailable("z3")
     def test_tactics_z3(self):
-        from z3 import Tactic, Then
+        from z3 import Tactic, Then # type: ignore[import]
 
         my_tactic = lambda ctx : Then(Tactic('simplify', ctx),
                                       Tactic('propagate-values', ctx),
@@ -485,7 +499,7 @@ class TestBasic(TestCase):
 
     @skipIfSolverNotAvailable("msat")
     def test_msat_converter_on_msat_error(self):
-        import mathsat
+        import mathsat # type: ignore[import]
         from pysmt.solvers.msat import MathSAT5Solver, MSatConverter
 
 

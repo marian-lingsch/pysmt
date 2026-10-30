@@ -29,11 +29,13 @@ from pysmt.test import (TestCase, skipIfSolverNotAvailable, skipIfNoSolverForLog
                         skipIfNoQEForLogic)
 from pysmt.test import main
 from pysmt.exceptions import (ConvertExpressionError, PysmtValueError,
-                              PysmtTypeError, InternalSolverError)
+                              PysmtTypeError, InternalSolverError,
+                              PysmtEmptySymbolNameError, UndefinedSymbolError)
 from pysmt.test.examples import get_example_formulae
 from pysmt.environment import Environment
 from pysmt.rewritings import cnf_as_set
 from pysmt.smtlib.parser import SmtLibParser
+from pysmt.parsing import parse as hr_parse
 from pysmt.smtlib.commands import DECLARE_FUN
 from pysmt.smtlib.script import SmtLibCommand
 from pysmt.logics import get_closer_smtlib_logic
@@ -258,7 +260,7 @@ class TestRegressions(TestCase):
 
     def test_cnf_as_set(self):
         r = cnf_as_set(Symbol("x"))
-        self.assertTrue(type(r) == frozenset)
+        self.assertEqual(type(r), frozenset)
 
     def test_substitute_to_real(self):
         p = Symbol("p", INT)
@@ -270,6 +272,64 @@ class TestRegressions(TestCase):
     def test_empty_string_symbol(self):
         with self.assertRaises(PysmtValueError):
             Symbol("")
+        # SMT-LIB allows `||` as a symbol name (see #587), but pySMT
+        # requires the user to opt-in explicitly.
+        self.env.allow_empty_var_names = True
+        self.assertNotEqual(Symbol(""), Symbol(" "))
+
+    def test_empty_string_symbol_error_message(self):
+        # Parsing a symbol with the empty name must point at the option
+        # to enable, not fail with an unrelated message.
+        smtlib = """(set-logic QF_BV)
+        (declare-fun || () (_ BitVec 4))
+        (assert (= || || ))
+        (check-sat)"""
+        with self.assertRaises(PysmtEmptySymbolNameError) as ctx:
+            SmtLibParser().get_script(StringIO(smtlib))
+        self.assertIn("allow_empty_var_names", str(ctx.exception))
+        with self.assertRaises(PysmtEmptySymbolNameError):
+            hr_parse("'' & x")
+        # Once enabled, the empty name is just an undeclared symbol
+        self.env.allow_empty_var_names = True
+        with self.assertRaises(UndefinedSymbolError):
+            hr_parse("'' & x")
+        Symbol("")
+        self.assertEqual(hr_parse("''"), Symbol(""))
+
+    @skipIfNoSolverForLogic(logics.QF_BV)
+    def test_empty_string_symbol_in_solvers(self):
+        self.env.allow_empty_var_names = True
+        empty = Symbol("", BVType(8))
+        other = Symbol("other", BVType(8))
+        f = Not(Equals(empty, other))
+        for sname in self.env.factory.all_solvers(logic=logics.QF_BV):
+            with Solver(name=sname, logic=logics.QF_BV) as s:
+                s.add_assertion(f)
+                self.assertTrue(s.solve(), sname)
+                self.assertTrue(s.get_value(empty).is_bv_constant(), sname)
+                # Round-trip, but only for converters that can back-convert
+                # a regular symbol in the first place.
+                try:
+                    can_back = s.converter.back(s.converter.convert(other)) == other
+                except Exception:
+                    can_back = False
+                if can_back:
+                    self.assertEqual(s.converter.back(s.converter.convert(empty)),
+                                     empty, sname)
+
+    @skipIfNoSolverForLogic(logics.QF_BV)
+    def test_empty_string_symbol_smtlib(self):
+        # The benchmark reported in #587 declares `||` and `| |`.
+        self.env.allow_empty_var_names = True
+        txt = """(set-logic QF_BV)
+        (declare-fun || () (_ BitVec 4))
+        (declare-fun | | () (_ BitVec 4))
+        (assert (not (= || | |)))
+        (check-sat)"""
+        script = SmtLibParser().get_script(StringIO(txt))
+        self.assertEqual({s.symbol_name() for s in script.get_declared_symbols()},
+                         {"", " "})
+        self.assertSat(script.get_last_formula())
 
     def test_smtlib_info_quoting(self):
         cmd = SmtLibCommand(smtcmd.SET_INFO, [":source", "This\nis\nmultiline!"])
@@ -397,7 +457,7 @@ class TestRegressions(TestCase):
 
     @skipIfSolverNotAvailable("z3")
     def test_z3_nary_back(self):
-        from z3 import Tactic
+        from z3 import Tactic # type: ignore[import]
         r = Symbol("r", REAL)
         s = Symbol("s", REAL)
         t = Symbol("t", REAL)
@@ -573,6 +633,40 @@ class TestRegressions(TestCase):
             with Solver(name='yices') as s:
                 s.add_assertion(f)
                 self.assertFalse(s.solve())
+
+    @skipIfSolverNotAvailable("msat")
+    def test_msat_all_sat_theory_atoms(self):
+        # Regression test: MathSAT5Solver.all_sat must accept arbitrary
+        # SMT-atoms as "important" terms, not only Boolean symbols.
+        # Previously the "important" terms were converted with a helper
+        # (_var2term) that assumed each term was a declared symbol, so
+        # passing a theory atom raised an AssertionError.
+        x = Symbol("x", INT)
+        f = And(LE(Int(0), x), LE(x, Int(5)))
+        atom = LE(x, Int(2))  # a theory atom, not a Boolean symbol
+
+        result = []
+
+        def callback(model, converter, res):
+            res.append(And(converter.back(v) for v in model))
+            return 1  # continue enumeration
+
+        with Solver(name="msat",
+                    solver_options={
+                        "dpll.allsat_minimize_model": "false",
+                        "dpll.allsat_allow_duplicates": "false",
+                        "preprocessor.toplevel_propagation": "false",
+                        "preprocessor.simplification": "0",
+                    }) as msat:
+            msat.add_assertion(f)
+            # This call used to raise AssertionError on a theory atom.
+            msat.all_sat([atom], lambda m: callback(m, msat.converter, result))
+
+        # The atom can be both true (x in [0,2]) and false (x in [3,5]),
+        # so we expect exactly the two disjoint total assignments.
+        self.assertEqual(len(result), 2, result)
+        self.assertIn(atom, result)
+        self.assertIn(Not(atom), result)
 
 
 if __name__ == "__main__":

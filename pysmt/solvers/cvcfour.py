@@ -20,12 +20,12 @@ from __future__ import absolute_import
 from pysmt.exceptions import SolverAPINotFound
 
 try:
-    import CVC4
+    import CVC4 # type: ignore[import]
 except ImportError:
     raise SolverAPINotFound
 
 import pysmt.typing as types
-from pysmt.logics import PYSMT_LOGICS, ARRAYS_CONST_LOGICS
+from pysmt.logics import PYSMT_LOGICS
 
 from pysmt.solvers.solver import Solver, Converter, SolverOptions
 from pysmt.exceptions import (SolverReturnedUnknownResultError,
@@ -74,10 +74,9 @@ class CVC4Options(SolverOptions):
 # EOC CVC4Options
 
 
-class CVC4Solver(Solver, SmtLibBasicSolver, SmtLibIgnoreMixin):
+class CVC4Solver(SmtLibBasicSolver):
 
     LOGICS = PYSMT_LOGICS -\
-             ARRAYS_CONST_LOGICS -\
              set(l for l in PYSMT_LOGICS if not l.theory.linear)
 
     OptionsClass = CVC4Options
@@ -92,6 +91,9 @@ class CVC4Solver(Solver, SmtLibBasicSolver, SmtLibIgnoreMixin):
         self.cvc4 = None
         self.declarations = None
         self.logic_name = str(logic)
+        if self.logic_name.endswith("*"):
+            # Const-array extension (pySMT-internal suffix)
+            self.logic_name = self.logic_name[:-1]
         if "t" in self.logic_name:
             # Custom Type extension
             self.logic_name = self.logic_name.replace("t","")
@@ -102,7 +104,6 @@ class CVC4Solver(Solver, SmtLibBasicSolver, SmtLibIgnoreMixin):
 
         self.reset_assertions()
         self.converter = CVC4Converter(environment, cvc4_exprMgr=self.em)
-        return
 
     def reset_assertions(self):
         del self.cvc4
@@ -215,10 +216,8 @@ class CVC4Converter(Converter, DagWalker):
         self.stringType = cvc4_exprMgr.stringType()
 
         self.declared_vars = {}
-        self.backconversion = {}
         self.mgr = environment.formula_manager
         self._get_type = environment.stc.get_type
-        return
 
     def declare_variable(self, var):
         if not var.is_symbol():
@@ -250,17 +249,33 @@ class CVC4Converter(Converter, DagWalker):
                 v = expr.getConstString()
                 res = self.mgr.String(v.toString())
             elif expr.getType().isArray():
-                const_ = expr.getConstArrayStoreAll()
-                array_type = self._cvc4_type_to_type(const_.getType())
-                base_value = self.back(const_.getExpr())
-                res = self.mgr.Array(array_type.index_type,
-                                     base_value)
+                res = self._back_array(expr)
             else:
                 raise PysmtTypeError("Unsupported constant type:",
                                      expr.getType().toString())
         else:
             raise PysmtTypeError("Unsupported expression:", expr.toString())
 
+        return res
+
+    def _back_array(self, expr):
+        """Converts a CVC4 array value into a pySMT Array.
+
+        CVC4 represents an array value as a (possibly empty) sequence of
+        STOREs on top of a STORE_ALL node, which holds the default value.
+        """
+        assert expr.getType().isArray(), "Expecting a CVC4 array"
+        stores = []
+        while expr.getNumChildren() == 3:
+            # STORE(array, index, value)
+            array, index, value = expr.getChildren()
+            stores.append((self.back(index), self.back(value)))
+            expr = array
+        const_ = expr.getConstArrayStoreAll()
+        array_type = self._cvc4_type_to_type(const_.getType())
+        res = self.mgr.Array(array_type.index_type, self.back(const_.getExpr()))
+        for index, value in reversed(stores):
+            res = self.mgr.Store(res, index, value)
         return res
 
     @catch_conversion_error
@@ -337,6 +352,15 @@ class CVC4Converter(Converter, DagWalker):
     def walk_array_select(self, formula, args, **kwargs):
         return self.mkExpr(CVC4.SELECT, args[0], args[1])
 
+    def walk_array_value(self, formula, args, **kwargs):
+        arr_type = self.env.stc.get_type(formula)
+        rval = self.mkConst(CVC4.ArrayStoreAll(self._type_to_cvc4(arr_type),
+                                               args[0]))
+        # The remaining args are (index, value) pairs
+        for i in range(1, len(args), 2):
+            rval = self.mkExpr(CVC4.STORE, rval, args[i], args[i+1])
+        return rval
+
     def walk_minus(self, formula, args, **kwargs):
         return self.mkExpr(CVC4.MINUS, args[0], args[1])
 
@@ -344,7 +368,8 @@ class CVC4Converter(Converter, DagWalker):
         return self.mkExpr(CVC4.EQUAL, args[0], args[1])
 
     def walk_times(self, formula, args, **kwargs):
-        if sum(1 for x in formula.args() if x.get_free_variables()) > 1:
+        if sum(1 for x in formula.args()
+               if self.env.fvo.get_free_variables(x)) > 1:
             raise NonLinearError(formula)
         res = args[0]
         for x in args[1:]:
@@ -353,6 +378,9 @@ class CVC4Converter(Converter, DagWalker):
 
     def walk_toreal(self, formula, args, **kwargs):
         return self.mkExpr(CVC4.TO_REAL, args[0])
+
+    def walk_toint(self, formula, args, **kwargs):
+        return self.mkExpr(CVC4.TO_INTEGER, args[0])
 
     def walk_function(self, formula, args, **kwargs):
         name = formula.function_name()
@@ -598,17 +626,17 @@ class CVC4Converter(Converter, DagWalker):
             # Recursively convert the types of index and elem
             idx_type = self._cvc4_type_to_type(type_.getIndexType())
             elem_type = self._cvc4_type_to_type(type_.getConstituentType())
-            return types.ArrayType(idx_type, elem_type)
+            return self.env.type_manager.ArrayType(idx_type, elem_type)
         elif type_.isBitVector():
             # Casting Type into BitVectorType
             type_ = CVC4.BitVectorType(type_)
-            return types.BVType(type_.getSize())
+            return self.env.type_manager.BVType(type_.getSize())
         elif type_.isFunction():
             # Casting Type into FunctionType
             type_ = CVC4.FunctionType(type_)
             return_type = type_.getRangeType()
             param_types = tuple(self._cvc4_type_to_type(ty) for ty in type_.getArgTypes())
-            return types.FunctionType(return_type, param_types)
+            return self.env.type_manager.FunctionType(return_type, param_types)
         else:
             raise NotImplementedError("Unsupported type: %s" % type_)
 
