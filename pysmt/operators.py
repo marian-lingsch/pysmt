@@ -25,7 +25,7 @@ from itertools import chain
 from typing import List
 
 
-ALL_TYPES = list(range(0,67))
+ALL_TYPES = list(range(0,68))
 
 (
 FORALL, EXISTS, AND, OR, NOT, IMPLIES, IFF, # Boolean Logic (0-6)
@@ -80,6 +80,7 @@ POW,                                        # Arithmetic Power (63)
 ALGEBRAIC_CONSTANT,                         # Algebraic Number (64)
 BV_TONATURAL,                               # BV to Natural Conversion (65)
 TOINT,                                      # LIRA to_int() function, i.e. floor (66)
+INT_TO_BV,                                  # Int to BV Conversion (67)
 ) = ALL_TYPES
 
 QUANTIFIERS = frozenset([FORALL, EXISTS])
@@ -106,7 +107,7 @@ BV_OPERATORS = frozenset([BV_NOT, BV_AND, BV_OR, BV_XOR,
                           BV_CONCAT, BV_EXTRACT, BV_NEG, BV_ADD,
                           BV_SUB, BV_MUL, BV_UDIV, BV_UREM, BV_LSHL, BV_LSHR,
                           BV_ROL, BV_ROR, BV_ZEXT, BV_SEXT,
-                          BV_COMP, BV_SDIV, BV_SREM, BV_ASHR])
+                          BV_COMP, BV_SDIV, BV_SREM, BV_ASHR, INT_TO_BV])
 
 STR_OPERATORS = frozenset([STR_LENGTH, STR_CONCAT, STR_INDEXOF, STR_REPLACE,
                            STR_SUBSTR, STR_CHARAT, STR_TO_INT, INT_TO_STR,])
@@ -226,4 +227,5 @@ __OP_STR__ = {
     DIV: "DIV",
     POW: "POW",
     ALGEBRAIC_CONSTANT: "ALGEBRAIC_CONSTANT",
+    INT_TO_BV: "INT_TO_BV",
 }

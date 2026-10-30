@@ -300,6 +300,11 @@ class HRPrinter(TreeWalker):
         yield formula.arg(0)
         self.write(")")
 
+    def walk_int_to_bv(self, formula: FNode) -> Iterator[FNode]:
+        self.write("int2bv[%d](" % formula.bv_width())
+        yield formula.arg(0)
+        self.write(")")
+
     def walk_and(self, formula: FNode) -> Iterator[Any]: return self.walk_nary(formula, " & ")
     def walk_or(self, formula: FNode) -> Iterator[Any]: return self.walk_nary(formula, " | ")
     def walk_plus(self, formula: FNode) -> Iterator[Any]: return self.walk_nary(formula, " + ")

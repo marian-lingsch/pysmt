@@ -1015,6 +1015,12 @@ class Simplifier(pysmt.walkers.DagWalker):
             return self.manager.Int(cast(int, args[0].constant_value()))
         return self.manager.BVToNatural(args[0])
 
+    def walk_int_to_bv(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        width = formula.bv_width()
+        if args[0].is_int_constant():
+            return self.manager.BV(cast(int, args[0].constant_value()) % 2**width, width)
+        return self.manager.IntToBV(args[0], width)
+
     def walk_array_select(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         a, i = args
         if a.is_array_value() and i.is_constant():

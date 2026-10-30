@@ -1120,6 +1120,13 @@ class FormulaManager(object):
         """
         return self.create_node(node_type=op.BV_TONATURAL, args=(formula,))
 
+    def IntToBV(self, formula: FNode, width: int) -> FNode:
+        """Returns the BitVector of the given width of the Integer modulo 2^width."""
+        if not is_python_integer(width) or width <= 0:
+            raise PysmtValueError("IntToBV: Expecting a positive width, got %s" % width)
+        return self.create_node(node_type=op.INT_TO_BV, args=(formula,),
+                                payload=(width,))
+
     def Select(self, arr: FNode, idx: FNode) -> FNode:
         """Creates a node representing an array selection."""
         return self.create_node(node_type=op.ARRAY_SELECT, args=(arr, idx))

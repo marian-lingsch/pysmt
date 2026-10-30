@@ -185,7 +185,7 @@ class TheoryOracle(walkers.DagWalker):
 
     @walkers.handles(op.RELATIONS)
     @walkers.handles(op.BOOL_OPERATORS)
-    @walkers.handles(op.BV_OPERATORS)
+    @walkers.handles(op.BV_OPERATORS - {op.INT_TO_BV})
     @walkers.handles(op.STR_OPERATORS -\
                      set([op.STR_LENGTH, op.STR_INDEXOF, op.STR_TO_INT]))
     @walkers.handles(op.ITE, op.ARRAY_SELECT, op.ARRAY_STORE, op.MINUS)
@@ -271,6 +271,13 @@ class TheoryOracle(walkers.DagWalker):
         theory_out = args[0].copy()
         theory_out.integer_arithmetic = True
         theory_out.integer_difference = True
+        return theory_out
+
+    def walk_int_to_bv(self, formula: FNode, args: List[Theory], **kwargs) -> Theory:
+        #pylint: disable=unused-argument
+        """Extends the Theory with BitVectors."""
+        theory_out = args[0].copy()
+        theory_out.bit_vectors = True
         return theory_out
 
     def walk_times(self, formula: FNode, args: List[Theory], **kwargs) -> Theory:

@@ -151,6 +151,12 @@ class SimpleTypeChecker(walkers.DagWalker):
             return INT
         return None
 
+    def walk_int_to_bv(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        if args[0].is_int_type():
+            return self.env.type_manager.BVType(formula.bv_width())
+        return None
+
     def walk_bv_concat(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
         # Width of BV operators are computed at construction time.
         # The type-checker only verifies that they are indeed

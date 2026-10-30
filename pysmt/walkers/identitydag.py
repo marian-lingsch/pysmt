@@ -236,6 +236,9 @@ class IdentityDagWalker(DagWalker):
     def walk_bv_tonatural(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         return self.mgr.BVToNatural(args[0])
 
+    def walk_int_to_bv(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.IntToBV(args[0], formula.bv_width())
+
     def walk_array_select(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         return self.mgr.Select(args[0], args[1])
 

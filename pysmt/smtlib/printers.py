@@ -118,6 +118,7 @@ class SmtPrinter(TreeWalker):
     def walk_bv_sdiv(self, formula): return self.walk_nary(formula, "bvsdiv")
     def walk_bv_srem(self, formula): return self.walk_nary(formula, "bvsrem")
     def walk_bv_tonatural(self, formula): return self.walk_nary(formula, "bv2nat")
+    def walk_int_to_bv(self, formula): return self.walk_nary(formula, "(_ int2bv %d)" % formula.bv_width())
     def walk_array_select(self, formula): return self.walk_nary(formula, "select")
     def walk_array_store(self, formula): return self.walk_nary(formula, "store")
 
@@ -497,6 +498,9 @@ class SmtDagPrinter(DagWalker):
 
     def walk_bv_tonatural(self, formula: FNode, args: List[str]) -> str:
         return self.walk_nary(formula, args, "bv2nat")
+
+    def walk_int_to_bv(self, formula: FNode, args: List[str]) -> str:
+        return self.walk_nary(formula, args, "(_ int2bv %d)" % formula.bv_width())
 
     def walk_array_select(self, formula: FNode, args: List[str]) -> str:
         return self.walk_nary(formula, args, "select")

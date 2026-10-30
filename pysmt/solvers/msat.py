@@ -1096,6 +1096,9 @@ class MSatConverter(Converter, DagWalker):
     def walk_bv_tonatural(self, formula: FNode, args: List[Any], **kwargs) -> Any:
         return self._msat_lib.msat_make_int_from_ubv(self.msat_env(), args[0])
 
+    def walk_int_to_bv(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_int_to_bv(self.msat_env(), formula.bv_width(), args[0])
+
     def walk_array_select(self, formula: FNode, args: List[Any], **kwargs) -> Any:
         return self._msat_lib.msat_make_array_read(self.msat_env(), args[0], args[1])
 
