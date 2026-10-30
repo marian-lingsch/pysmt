@@ -104,7 +104,8 @@ class CVC5Solver(SmtLibBasicSolver):
                        if l.theory.arrays_const
                        and l.theory.bit_vectors
                        and (l.theory.integer_arithmetic
-                            or l.theory.real_arithmetic))
+                            or l.theory.real_arithmetic)) - \
+             frozenset(l for l in PYSMT_LOGICS if l.theory.floating_point)
 
     OptionsClass = CVC5Options
 

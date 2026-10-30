@@ -43,14 +43,18 @@ from pysmt.operators import (FORALL, EXISTS, AND, OR, NOT, IMPLIES, IFF,
                              BV_ASHR,
                              STR_CONSTANT,
                              ARRAY_SELECT, ARRAY_STORE, ARRAY_VALUE,
-                             ALGEBRAIC_CONSTANT)
+                             ALGEBRAIC_CONSTANT,
+                             FP_CONSTANT, RM_CONSTANT,
+                             FP_TO_UBV, FP_TO_SBV, FP_TO_FP,
+                             FP_FROM_UBV, FP_FROM_SBV, FP_FROM_BITS)
 
 from pysmt.operators import  (BOOL_OPERATORS, THEORY_OPERATORS,
                               BV_OPERATORS, IRA_OPERATORS, ARRAY_OPERATORS,
-                              STR_OPERATORS,
+                              STR_OPERATORS, FP_OPERATORS, FP_RELATIONS,
                               RELATIONS, CONSTANTS)
 
-from pysmt.typing import PySMTType, BOOL, REAL, INT, BVType, STRING
+from pysmt.typing import (PySMTType, BOOL, REAL, INT, BVType, STRING,
+                          FPType, ROUNDING_MODE)
 from pysmt.decorators import deprecated, assert_infix_enabled
 from pysmt.utils import twos_complement
 from pysmt.constants import is_python_integer
@@ -173,6 +177,14 @@ class FNode(object):
                     return False
                 if self._content.payload[1] != cast(types._BVType, _type).width:
                     return False
+            if _type.is_fp_type():
+                if self.node_type() != FP_CONSTANT:
+                    return False
+                if FPType(*self._content.payload[1:]) != _type:
+                    return False
+            if _type.is_rounding_mode_type() and \
+               self.node_type() != RM_CONSTANT:
+                return False
 
         return value is None or value == self.constant_value()
 
@@ -207,6 +219,14 @@ class FNode(object):
 
         type_ = None if width is None else BVType(width=width)
         return self.is_constant(_type=type_, value=value)
+
+    def is_fp_constant(self) -> bool:
+        """Test whether the formula is a FloatingPoint constant."""
+        return self.node_type() == FP_CONSTANT
+
+    def is_rm_constant(self) -> bool:
+        """Test whether the formula is a RoundingMode constant."""
+        return self.node_type() == RM_CONSTANT
 
     def is_string_constant(self, value: Optional[str]=None) -> bool:
         """Test whether the formula is a String constant.
@@ -349,6 +369,11 @@ class FNode(object):
         """Test whether the node is a BitVector operator."""
         return self.node_type() in BV_OPERATORS
 
+    def is_fp_op(self) -> bool:
+        """Test whether the node is a FloatingPoint operator or relation."""
+        return self.node_type() in FP_OPERATORS or \
+            self.node_type() in FP_RELATIONS
+
     def is_array_op(self) -> bool:
         """Test whether the node is an array operator."""
         return self.node_type() in ARRAY_OPERATORS
@@ -488,10 +513,26 @@ class FNode(object):
             # This must be a select over an array with BV value type
             ty = self.arg(0).get_type()
             return cast(types._BVType, cast(types._ArrayType, ty).elem_type).width
+        elif self.node_type() in (FP_TO_UBV, FP_TO_SBV):
+            return self._content.payload[0]
         else:
             # BV Operator
             assert self.is_bv_op(), "Unsupported method bv_width on %s" % self
             return self._content.payload[0]
+
+    def fp_exponent_width(self) -> int:
+        """Return the exponent width of the FP formula."""
+        if self.node_type() in (FP_CONSTANT, FP_TO_FP, FP_FROM_UBV,
+                                FP_FROM_SBV, FP_FROM_BITS):
+            return self._content.payload[-2]
+        return cast(types._FPType, self.get_type()).exponent_width
+
+    def fp_significand_width(self) -> int:
+        """Return the significand width, with the hidden bit, of the FP formula."""
+        if self.node_type() in (FP_CONSTANT, FP_TO_FP, FP_FROM_UBV,
+                                FP_FROM_SBV, FP_FROM_BITS):
+            return self._content.payload[-1]
+        return cast(types._FPType, self.get_type()).significand_width
 
     def bv_extract_start(self) -> int:
         """Return the starting index for BVExtract."""
@@ -567,7 +608,7 @@ class FNode(object):
     def constant_value(self) -> Union[str, bool, Fraction, int]:
         """Return the value of the Constant."""
         assert self.is_constant(), "%s is not a constant" % str(self)
-        if self.node_type() == BV_CONSTANT:
+        if self.node_type() in (BV_CONSTANT, FP_CONSTANT):
             return self._content.payload[0]
         return self._content.payload
 
@@ -581,6 +622,10 @@ class FNode(object):
             return BOOL
         elif self.node_type() == STR_CONSTANT:
             return STRING
+        elif self.node_type() == FP_CONSTANT:
+            return FPType(self.fp_exponent_width(), self.fp_significand_width())
+        elif self.node_type() == RM_CONSTANT:
+            return ROUNDING_MODE
         else:
             assert self.node_type() == BV_CONSTANT,\
                 "Unsupported method constant_type '%s'" % self

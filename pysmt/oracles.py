@@ -169,6 +169,8 @@ class TheoryOracle(walkers.DagWalker):
             pass
         elif ty.is_bv_type():
             theory.bit_vectors = True
+        elif ty.is_fp_type() or ty.is_rounding_mode_type():
+            theory.floating_point = True
         elif ty.is_array_type():
             assert isinstance(ty, types._ArrayType)
             theory.arrays = True
@@ -203,6 +205,7 @@ class TheoryOracle(walkers.DagWalker):
     @walkers.handles(op.INT_CONSTANT, op.BV_CONSTANT)
     @walkers.handles(op.ALGEBRAIC_CONSTANT)
     @walkers.handles(op.STR_CONSTANT)
+    @walkers.handles(op.FP_CONSTANT, op.RM_CONSTANT)
     def walk_constant(self, formula: FNode, args: List[Theory], **kwargs) -> Theory:
         """Returns a new theory object with the type of the constant."""
         #pylint: disable=unused-argument
@@ -217,6 +220,8 @@ class TheoryOracle(walkers.DagWalker):
             theory_out.bit_vectors = True
         elif formula.is_string_constant():
             theory_out.strings = True
+        elif formula.is_fp_constant() or formula.is_rm_constant():
+            theory_out.floating_point = True
         else:
             assert formula.is_bool_constant()
         return theory_out
@@ -278,6 +283,15 @@ class TheoryOracle(walkers.DagWalker):
         """Extends the Theory with BitVectors."""
         theory_out = args[0].copy()
         theory_out.bit_vectors = True
+        return theory_out
+
+    @walkers.handles(op.FP_OPERATORS)
+    def walk_fp_operator(self, formula: FNode, args: List[Theory], **kwargs) -> Theory:
+        """Extends the Theory with FloatingPoint, and BitVectors for a conversion to one."""
+        theory_out = self.walk_combine(formula, args, **kwargs)
+        theory_out.floating_point = True
+        if formula.node_type() in (op.FP_TO_UBV, op.FP_TO_SBV):
+            theory_out.bit_vectors = True
         return theory_out
 
     def walk_times(self, formula: FNode, args: List[Theory], **kwargs) -> Theory:

@@ -29,7 +29,7 @@ import pysmt.walkers as walkers
 import pysmt.operators as op
 import pysmt.typing as types
 
-from pysmt.typing import PySMTType, BOOL, REAL, INT, STRING
+from pysmt.typing import PySMTType, BOOL, REAL, INT, STRING, ROUNDING_MODE
 from pysmt.exceptions import PysmtTypeError
 from pysmt.fnode import FNode
 
@@ -157,6 +157,67 @@ class SimpleTypeChecker(walkers.DagWalker):
             return self.env.type_manager.BVType(formula.bv_width())
         return None
 
+    def _same_fp_type(self, args: Sequence[Optional[PySMTType]]) -> Optional[PySMTType]:
+        """The FP type of all args, or None if they do not have the same one."""
+        first = args[0]
+        if first is None or not first.is_fp_type():
+            return None
+        if any(a != first for a in args[1:]):
+            return None
+        return first
+
+    def _fp_type_of(self, formula: FNode) -> PySMTType:
+        return self.env.type_manager.FPType(formula.fp_exponent_width(),
+                                            formula.fp_significand_width())
+
+    @walkers.handles(op.FP_ABS, op.FP_NEG, op.FP_MIN, op.FP_MAX)
+    def walk_fp_unrounded(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        return self._same_fp_type(args)
+
+    @walkers.handles(op.FP_ADD, op.FP_SUB, op.FP_MUL, op.FP_DIV)
+    @walkers.handles(op.FP_SQRT, op.FP_ROUND_TO_INTEGRAL)
+    def walk_fp_rounded(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        if args[0] != ROUNDING_MODE:
+            return None
+        return self._same_fp_type(args[1:])
+
+    @walkers.handles(op.FP_RELATIONS)
+    def walk_fp_to_bool(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        if self._same_fp_type(args) is None:
+            return None
+        return BOOL
+
+    @walkers.handles(op.FP_TO_UBV, op.FP_TO_SBV)
+    def walk_fp_to_bitvector(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        if args[0] != ROUNDING_MODE or self._same_fp_type(args[1:]) is None:
+            return None
+        return self.env.type_manager.BVType(formula.bv_width())
+
+    def walk_fp_to_fp(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        if args[0] != ROUNDING_MODE or self._same_fp_type(args[1:]) is None:
+            return None
+        return self._fp_type_of(formula)
+
+    @walkers.handles(op.FP_FROM_UBV, op.FP_FROM_SBV)
+    def walk_fp_from_bitvector(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        if args[0] != ROUNDING_MODE or args[1] is None or \
+           not args[1].is_bv_type():
+            return None
+        return self._fp_type_of(formula)
+
+    def walk_fp_from_bits(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        width = formula.fp_exponent_width() + formula.fp_significand_width()
+        if args[0] is None or not args[0].is_bv_type(width):
+            return None
+        return self._fp_type_of(formula)
+
     def walk_bv_concat(self, formula: FNode, args: List[PySMTType], **kwargs) -> Optional[PySMTType]:
         # Width of BV operators are computed at construction time.
         # The type-checker only verifies that they are indeed
@@ -264,6 +325,18 @@ class SimpleTypeChecker(walkers.DagWalker):
         assert formula is not None
         assert len(args) == 0
         return self.env.type_manager.BVType(formula.bv_width())
+
+    @walkers.handles(op.FP_CONSTANT)
+    def walk_identity_fp(self, formula: FNode, args: List[Any], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        assert len(args) == 0
+        return self._fp_type_of(formula)
+
+    @walkers.handles(op.RM_CONSTANT)
+    def walk_identity_rounding_mode(self, formula: FNode, args: List[Any], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        assert len(args) == 0
+        return ROUNDING_MODE
 
     def walk_symbol(self, formula: FNode, args: List[Any], **kwargs) -> Optional[PySMTType]:
         assert formula is not None

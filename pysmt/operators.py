@@ -25,7 +25,7 @@ from itertools import chain
 from typing import List
 
 
-ALL_TYPES = list(range(0,68))
+ALL_TYPES = list(range(0,96))
 
 (
 FORALL, EXISTS, AND, OR, NOT, IMPLIES, IFF, # Boolean Logic (0-6)
@@ -81,6 +81,22 @@ ALGEBRAIC_CONSTANT,                         # Algebraic Number (64)
 BV_TONATURAL,                               # BV to Natural Conversion (65)
 TOINT,                                      # LIRA to_int() function, i.e. floor (66)
 INT_TO_BV,                                  # Int to BV Conversion (67)
+#
+# FLOATING POINT
+#
+FP_CONSTANT, RM_CONSTANT,                   # Constants (68-69)
+FP_ABS, FP_NEG,                             # Sign Operations (70-71)
+FP_ADD, FP_SUB, FP_MUL, FP_DIV,             # Rounded Arithmetic (72-75)
+FP_SQRT, FP_ROUND_TO_INTEGRAL,              # Rounded Unary Operations (76-77)
+FP_MIN, FP_MAX,                             # Minimum and Maximum (78-79)
+FP_LE, FP_LT, FP_EQ,                        # Comparison (80-82)
+FP_IS_NORMAL, FP_IS_SUBNORMAL, FP_IS_ZERO,  # Classification (83-89)
+FP_IS_INFINITE, FP_IS_NAN,
+FP_IS_NEGATIVE, FP_IS_POSITIVE,
+FP_TO_UBV, FP_TO_SBV,                       # FP to BV Conversion (90-91)
+FP_TO_FP,                                   # FP to FP Conversion (92)
+FP_FROM_UBV, FP_FROM_SBV,                   # BV to FP Conversion (93-94)
+FP_FROM_BITS,                               # IEEE Bits to FP Conversion (95)
 ) = ALL_TYPES
 
 QUANTIFIERS = frozenset([FORALL, EXISTS])
@@ -90,7 +106,8 @@ BOOL_CONNECTIVES = frozenset([AND, OR, NOT, IMPLIES, IFF])
 BOOL_OPERATORS = frozenset(QUANTIFIERS | BOOL_CONNECTIVES)
 
 CONSTANTS = frozenset([BOOL_CONSTANT, REAL_CONSTANT, INT_CONSTANT,
-                       BV_CONSTANT, STR_CONSTANT, ALGEBRAIC_CONSTANT])
+                       BV_CONSTANT, STR_CONSTANT, ALGEBRAIC_CONSTANT,
+                       FP_CONSTANT, RM_CONSTANT])
 
 # Relations are predicates on theory atoms.
 # Relations have boolean type. They are a subset of the operators for a theory
@@ -100,7 +117,13 @@ IRA_RELATIONS = frozenset([LE, LT])
 
 STR_RELATIONS = frozenset([STR_CONTAINS, STR_PREFIXOF, STR_SUFFIXOF])
 
-RELATIONS = frozenset((EQUALS,)) | BV_RELATIONS | IRA_RELATIONS | STR_RELATIONS
+FP_RELATIONS = frozenset([FP_LE, FP_LT, FP_EQ,
+                          FP_IS_NORMAL, FP_IS_SUBNORMAL, FP_IS_ZERO,
+                          FP_IS_INFINITE, FP_IS_NAN,
+                          FP_IS_NEGATIVE, FP_IS_POSITIVE])
+
+RELATIONS = frozenset((EQUALS,)) | BV_RELATIONS | IRA_RELATIONS | \
+    STR_RELATIONS | FP_RELATIONS
 
 # Operators are functions that return a Theory object
 BV_OPERATORS = frozenset([BV_NOT, BV_AND, BV_OR, BV_XOR,
@@ -117,7 +140,13 @@ IRA_OPERATORS = frozenset([PLUS, MINUS, TIMES, TOREAL, TOINT, DIV, POW,
 
 ARRAY_OPERATORS = frozenset([ARRAY_SELECT, ARRAY_STORE, ARRAY_VALUE])
 
-THEORY_OPERATORS = IRA_OPERATORS | BV_OPERATORS | ARRAY_OPERATORS | STR_OPERATORS
+FP_OPERATORS = frozenset([FP_ABS, FP_NEG, FP_ADD, FP_SUB, FP_MUL, FP_DIV,
+                          FP_SQRT, FP_ROUND_TO_INTEGRAL, FP_MIN, FP_MAX,
+                          FP_TO_UBV, FP_TO_SBV, FP_TO_FP,
+                          FP_FROM_UBV, FP_FROM_SBV, FP_FROM_BITS])
+
+THEORY_OPERATORS = IRA_OPERATORS | BV_OPERATORS | ARRAY_OPERATORS | \
+    STR_OPERATORS | FP_OPERATORS
 
 CUSTOM_NODE_TYPES: List[int] = []
 
@@ -228,4 +257,32 @@ __OP_STR__ = {
     POW: "POW",
     ALGEBRAIC_CONSTANT: "ALGEBRAIC_CONSTANT",
     INT_TO_BV: "INT_TO_BV",
+    FP_CONSTANT: "FP_CONSTANT",
+    RM_CONSTANT: "RM_CONSTANT",
+    FP_ABS: "FP_ABS",
+    FP_NEG: "FP_NEG",
+    FP_ADD: "FP_ADD",
+    FP_SUB: "FP_SUB",
+    FP_MUL: "FP_MUL",
+    FP_DIV: "FP_DIV",
+    FP_SQRT: "FP_SQRT",
+    FP_ROUND_TO_INTEGRAL: "FP_ROUND_TO_INTEGRAL",
+    FP_MIN: "FP_MIN",
+    FP_MAX: "FP_MAX",
+    FP_LE: "FP_LE",
+    FP_LT: "FP_LT",
+    FP_EQ: "FP_EQ",
+    FP_IS_NORMAL: "FP_IS_NORMAL",
+    FP_IS_SUBNORMAL: "FP_IS_SUBNORMAL",
+    FP_IS_ZERO: "FP_IS_ZERO",
+    FP_IS_INFINITE: "FP_IS_INFINITE",
+    FP_IS_NAN: "FP_IS_NAN",
+    FP_IS_NEGATIVE: "FP_IS_NEGATIVE",
+    FP_IS_POSITIVE: "FP_IS_POSITIVE",
+    FP_TO_UBV: "FP_TO_UBV",
+    FP_TO_SBV: "FP_TO_SBV",
+    FP_TO_FP: "FP_TO_FP",
+    FP_FROM_UBV: "FP_FROM_UBV",
+    FP_FROM_SBV: "FP_FROM_SBV",
+    FP_FROM_BITS: "FP_FROM_BITS",
 }

@@ -24,6 +24,52 @@ from pysmt.utils import quote
 from pysmt.fnode import FNode
 from pysmt.smtlib.annotations import Annotations
 
+_FP_FUNCTION_NAMES = {
+    op.FP_ABS: "fp.abs",
+    op.FP_NEG: "fp.neg",
+    op.FP_ADD: "fp.add",
+    op.FP_SUB: "fp.sub",
+    op.FP_MUL: "fp.mul",
+    op.FP_DIV: "fp.div",
+    op.FP_SQRT: "fp.sqrt",
+    op.FP_ROUND_TO_INTEGRAL: "fp.roundToIntegral",
+    op.FP_MIN: "fp.min",
+    op.FP_MAX: "fp.max",
+    op.FP_LE: "fp.leq",
+    op.FP_LT: "fp.lt",
+    op.FP_EQ: "fp.eq",
+    op.FP_IS_NORMAL: "fp.isNormal",
+    op.FP_IS_SUBNORMAL: "fp.isSubnormal",
+    op.FP_IS_ZERO: "fp.isZero",
+    op.FP_IS_INFINITE: "fp.isInfinite",
+    op.FP_IS_NAN: "fp.isNaN",
+    op.FP_IS_NEGATIVE: "fp.isNegative",
+    op.FP_IS_POSITIVE: "fp.isPositive",
+}
+
+
+def _fp_function_name(formula: FNode) -> str:
+    """The SMT-LIB function symbol of the FP operator or relation."""
+    node_type = formula.node_type()
+    if node_type in _FP_FUNCTION_NAMES:
+        return _FP_FUNCTION_NAMES[node_type]
+    if node_type == op.FP_TO_UBV:
+        return "(_ fp.to_ubv %d)" % formula.bv_width()
+    if node_type == op.FP_TO_SBV:
+        return "(_ fp.to_sbv %d)" % formula.bv_width()
+    name = "to_fp_unsigned" if node_type == op.FP_FROM_UBV else "to_fp"
+    return "(_ %s %d %d)" % (name, formula.fp_exponent_width(),
+                             formula.fp_significand_width())
+
+
+def _fp_constant(formula: FNode) -> str:
+    """The FP constant as fp of its sign, exponent and significand bits."""
+    exponent_width = formula.fp_exponent_width()
+    bits = bin(int(formula.constant_value()))[2:].rjust(
+        exponent_width + formula.fp_significand_width(), "0")
+    return "(fp #b%s #b%s #b%s)" % (bits[0], bits[1:exponent_width + 1],
+                                    bits[exponent_width + 1:])
+
 def write_annotations(f: Callable) -> Callable:
     def resf(self, formula, *args, **kwargs):
         annots = self.annotations
@@ -119,6 +165,19 @@ class SmtPrinter(TreeWalker):
     def walk_bv_srem(self, formula): return self.walk_nary(formula, "bvsrem")
     def walk_bv_tonatural(self, formula): return self.walk_nary(formula, "bv2nat")
     def walk_int_to_bv(self, formula): return self.walk_nary(formula, "(_ int2bv %d)" % formula.bv_width())
+
+    @handles(op.FP_OPERATORS | op.FP_RELATIONS)
+    def walk_fp_operator(self, formula):
+        return self.walk_nary(formula, _fp_function_name(formula))
+
+    @write_annotations
+    def walk_fp_constant(self, formula):
+        self.write(_fp_constant(formula))
+
+    @write_annotations
+    def walk_rm_constant(self, formula):
+        self.write(formula.constant_value())
+
     def walk_array_select(self, formula): return self.walk_nary(formula, "select")
     def walk_array_store(self, formula): return self.walk_nary(formula, "store")
 
@@ -501,6 +560,18 @@ class SmtDagPrinter(DagWalker):
 
     def walk_int_to_bv(self, formula: FNode, args: List[str]) -> str:
         return self.walk_nary(formula, args, "(_ int2bv %d)" % formula.bv_width())
+
+    @handles(op.FP_OPERATORS | op.FP_RELATIONS)
+    def walk_fp_operator(self, formula: FNode, args: List[str], **kwargs) -> str:
+        return self.walk_nary(formula, args, _fp_function_name(formula))
+
+    @write_annotations_dag
+    def walk_fp_constant(self, formula: FNode, **kwargs) -> str:
+        return _fp_constant(formula)
+
+    @write_annotations_dag
+    def walk_rm_constant(self, formula: FNode, **kwargs) -> str:
+        return str(formula.constant_value())
 
     def walk_array_select(self, formula: FNode, args: List[str]) -> str:
         return self.walk_nary(formula, args, "select")

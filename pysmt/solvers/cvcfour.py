@@ -77,7 +77,8 @@ class CVC4Options(SolverOptions):
 class CVC4Solver(SmtLibBasicSolver):
 
     LOGICS = PYSMT_LOGICS -\
-             set(l for l in PYSMT_LOGICS if not l.theory.linear)
+             set(l for l in PYSMT_LOGICS
+                 if not l.theory.linear or l.theory.floating_point)
 
     OptionsClass = CVC4Options
 

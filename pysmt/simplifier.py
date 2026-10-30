@@ -1021,6 +1021,13 @@ class Simplifier(pysmt.walkers.DagWalker):
             return self.manager.BV(cast(int, args[0].constant_value()) % 2**width, width)
         return self.manager.IntToBV(args[0], width)
 
+    @handles(op.FP_OPERATORS | op.FP_RELATIONS)
+    @handles(op.FP_CONSTANT, op.RM_CONSTANT)
+    def walk_fp(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        """Rebuilds the FloatingPoint term, which is not simplified, over the simplified args."""
+        return self.manager.create_node(formula.node_type(), tuple(args),
+                                        formula._content.payload)
+
     def walk_array_select(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         a, i = args
         if a.is_array_value() and i.is_constant():

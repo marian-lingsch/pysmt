@@ -151,7 +151,8 @@ class Z3Solver(IncrementalTrackingSolver, UnsatCoreSolver, SmtLibBasicSolver):
 
     LOGICS: Iterable[Logic] = (PYSMT_LOGICS |
               {AUFLIRA, AUFLIA, AUFNIRA, ALIA}) -\
-             set(x for x in PYSMT_LOGICS if x.theory.strings)
+             set(x for x in PYSMT_LOGICS
+                 if x.theory.strings or x.theory.floating_point)
     OptionsClass = Z3Options
 
     SOLVERFOR_LOGIC_NAMES=['AUFLIA', 'ALIA', 'AUFLIRA', 'AUFNIRA', 'LRA', 'LIA', 'NIA',

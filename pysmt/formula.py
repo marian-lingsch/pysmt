@@ -1127,6 +1127,151 @@ class FormulaManager(object):
         return self.create_node(node_type=op.INT_TO_BV, args=(formula,),
                                 payload=(width,))
 
+    def _assert_positive_widths(self, *widths: int):
+        for width in widths:
+            if not is_python_integer(width) or width <= 0:
+                raise PysmtValueError("Expecting a positive width, got %s" % width)
+
+    def FPConstant(self, bits: int, exponent_width: int, significand_width: int) -> FNode:
+        """Returns the FloatingPoint constant of the given IEEE bits.
+
+        The bits hold the sign, the exponent and the significand without the
+        hidden bit, whose width the significand width counts.
+        """
+        self._assert_positive_widths(exponent_width, significand_width)
+        if not is_python_integer(bits) or \
+           not 0 <= bits < 2**(exponent_width + significand_width):
+            raise PysmtValueError("Invalid IEEE bits %s of a FloatingPoint "
+                                  "constant" % bits)
+        return self.create_node(node_type=op.FP_CONSTANT, args=tuple(),
+                                payload=(int(bits), exponent_width,
+                                         significand_width))
+
+    def RoundingMode(self, name: str) -> FNode:
+        """Returns the RoundingMode of the given SMT-LIB name, e.g., RNE."""
+        if name not in ("RNE", "RNA", "RTP", "RTN", "RTZ"):
+            raise PysmtValueError("Unknown rounding mode %s" % name)
+        return self.create_node(node_type=op.RM_CONSTANT, args=tuple(),
+                                payload=name)
+
+    def FPAbs(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_ABS, args=(formula,))
+
+    def FPNeg(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_NEG, args=(formula,))
+
+    def FPAdd(self, rounding_mode: FNode, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_ADD,
+                                args=(rounding_mode, left, right))
+
+    def FPSub(self, rounding_mode: FNode, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_SUB,
+                                args=(rounding_mode, left, right))
+
+    def FPMul(self, rounding_mode: FNode, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_MUL,
+                                args=(rounding_mode, left, right))
+
+    def FPDiv(self, rounding_mode: FNode, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_DIV,
+                                args=(rounding_mode, left, right))
+
+    def FPSqrt(self, rounding_mode: FNode, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_SQRT,
+                                args=(rounding_mode, formula))
+
+    def FPRoundToIntegral(self, rounding_mode: FNode, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_ROUND_TO_INTEGRAL,
+                                args=(rounding_mode, formula))
+
+    def FPMin(self, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_MIN, args=(left, right))
+
+    def FPMax(self, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_MAX, args=(left, right))
+
+    def FPLE(self, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_LE, args=(left, right))
+
+    def FPLT(self, left: FNode, right: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_LT, args=(left, right))
+
+    def FPGE(self, left: FNode, right: FNode) -> FNode:
+        return self.FPLE(right, left)
+
+    def FPGT(self, left: FNode, right: FNode) -> FNode:
+        return self.FPLT(right, left)
+
+    def FPEQ(self, left: FNode, right: FNode) -> FNode:
+        """Returns the IEEE equality, under which NaN differs from itself and both zeros are equal."""
+        return self.create_node(node_type=op.FP_EQ, args=(left, right))
+
+    def FPIsNormal(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_IS_NORMAL, args=(formula,))
+
+    def FPIsSubnormal(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_IS_SUBNORMAL, args=(formula,))
+
+    def FPIsZero(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_IS_ZERO, args=(formula,))
+
+    def FPIsInfinite(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_IS_INFINITE, args=(formula,))
+
+    def FPIsNaN(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_IS_NAN, args=(formula,))
+
+    def FPIsNegative(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_IS_NEGATIVE, args=(formula,))
+
+    def FPIsPositive(self, formula: FNode) -> FNode:
+        return self.create_node(node_type=op.FP_IS_POSITIVE, args=(formula,))
+
+    def FPToUBV(self, rounding_mode: FNode, formula: FNode, width: int) -> FNode:
+        self._assert_positive_widths(width)
+        return self.create_node(node_type=op.FP_TO_UBV,
+                                args=(rounding_mode, formula), payload=(width,))
+
+    def FPToSBV(self, rounding_mode: FNode, formula: FNode, width: int) -> FNode:
+        self._assert_positive_widths(width)
+        return self.create_node(node_type=op.FP_TO_SBV,
+                                args=(rounding_mode, formula), payload=(width,))
+
+    def FPToFP(self, rounding_mode: FNode, formula: FNode,
+               exponent_width: int, significand_width: int) -> FNode:
+        """Returns the FloatingPoint of the given format nearest to the given one."""
+        self._assert_positive_widths(exponent_width, significand_width)
+        return self.create_node(node_type=op.FP_TO_FP,
+                                args=(rounding_mode, formula),
+                                payload=(exponent_width, significand_width))
+
+    def FPFromUBV(self, rounding_mode: FNode, formula: FNode,
+                  exponent_width: int, significand_width: int) -> FNode:
+        self._assert_positive_widths(exponent_width, significand_width)
+        return self.create_node(node_type=op.FP_FROM_UBV,
+                                args=(rounding_mode, formula),
+                                payload=(exponent_width, significand_width))
+
+    def FPFromSBV(self, rounding_mode: FNode, formula: FNode,
+                  exponent_width: int, significand_width: int) -> FNode:
+        self._assert_positive_widths(exponent_width, significand_width)
+        return self.create_node(node_type=op.FP_FROM_SBV,
+                                args=(rounding_mode, formula),
+                                payload=(exponent_width, significand_width))
+
+    def FPFromBits(self, formula: FNode, exponent_width: int,
+                   significand_width: int) -> FNode:
+        """Returns the FloatingPoint of the IEEE bits of the BitVector."""
+        self._assert_positive_widths(exponent_width, significand_width)
+        return self.create_node(node_type=op.FP_FROM_BITS, args=(formula,),
+                                payload=(exponent_width, significand_width))
+
+    def FP(self, sign: FNode, exponent: FNode, significand: FNode) -> FNode:
+        """Returns the FloatingPoint of the three BitVectors, as fp of SMT-LIB."""
+        bits = self.BVConcat(self.BVConcat(sign, exponent), significand)
+        return self.FPFromBits(bits, exponent.bv_width(),
+                               significand.bv_width() + 1)
+
     def Select(self, arr: FNode, idx: FNode) -> FNode:
         """Creates a node representing an array selection."""
         return self.create_node(node_type=op.ARRAY_SELECT, args=(arr, idx))

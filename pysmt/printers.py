@@ -305,6 +305,66 @@ class HRPrinter(TreeWalker):
         yield formula.arg(0)
         self.write(")")
 
+    def walk_application(self, formula: FNode, name: str) -> Iterator[FNode]:
+        self.write(name + "(")
+        args = formula.args()
+        for s in args[:-1]:
+            yield s
+            self.write(", ")
+        yield args[-1]
+        self.write(")")
+
+    def walk_fp_constant(self, formula: FNode) -> None:
+        # The IEEE bits and the widths, as MathSAT prints them
+        self.write("%d_%d_%d" % (cast(int, formula.constant_value()),
+                                 formula.fp_exponent_width(),
+                                 formula.fp_significand_width()))
+
+    def walk_rm_constant(self, formula: FNode) -> None:
+        self.write(cast(str, formula.constant_value()))
+
+    def walk_fp_abs(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.abs")
+    def walk_fp_neg(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.neg")
+    def walk_fp_add(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.add")
+    def walk_fp_sub(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.sub")
+    def walk_fp_mul(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.mul")
+    def walk_fp_div(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.div")
+    def walk_fp_sqrt(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.sqrt")
+    def walk_fp_round_to_integral(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.roundToIntegral")
+    def walk_fp_min(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.min")
+    def walk_fp_max(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.max")
+    def walk_fp_le(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.leq")
+    def walk_fp_lt(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.lt")
+    def walk_fp_eq(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.eq")
+    def walk_fp_is_normal(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.isNormal")
+    def walk_fp_is_subnormal(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.isSubnormal")
+    def walk_fp_is_zero(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.isZero")
+    def walk_fp_is_infinite(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.isInfinite")
+    def walk_fp_is_nan(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.isNaN")
+    def walk_fp_is_negative(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.isNegative")
+    def walk_fp_is_positive(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.isPositive")
+
+    def walk_fp_to_ubv(self, formula: FNode) -> Iterator[FNode]:
+        return self.walk_application(formula, "fp.to_ubv[%d]" % formula.bv_width())
+
+    def walk_fp_to_sbv(self, formula: FNode) -> Iterator[FNode]:
+        return self.walk_application(formula, "fp.to_sbv[%d]" % formula.bv_width())
+
+    def _fp_format(self, formula: FNode) -> str:
+        return "[%d,%d]" % (formula.fp_exponent_width(), formula.fp_significand_width())
+
+    def walk_fp_to_fp(self, formula: FNode) -> Iterator[FNode]:
+        return self.walk_application(formula, "to_fp" + self._fp_format(formula))
+
+    def walk_fp_from_sbv(self, formula: FNode) -> Iterator[FNode]:
+        return self.walk_application(formula, "to_fp" + self._fp_format(formula))
+
+    def walk_fp_from_ubv(self, formula: FNode) -> Iterator[FNode]:
+        return self.walk_application(formula, "to_fp_unsigned" + self._fp_format(formula))
+
+    def walk_fp_from_bits(self, formula: FNode) -> Iterator[FNode]:
+        return self.walk_application(formula, "to_fp" + self._fp_format(formula))
+
     def walk_and(self, formula: FNode) -> Iterator[Any]: return self.walk_nary(formula, " & ")
     def walk_or(self, formula: FNode) -> Iterator[Any]: return self.walk_nary(formula, " | ")
     def walk_plus(self, formula: FNode) -> Iterator[Any]: return self.walk_nary(formula, " + ")

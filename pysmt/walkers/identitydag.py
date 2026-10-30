@@ -239,6 +239,96 @@ class IdentityDagWalker(DagWalker):
     def walk_int_to_bv(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         return self.mgr.IntToBV(args[0], formula.bv_width())
 
+    def walk_fp_constant(self, formula: FNode, **kwargs) -> FNode:
+        return self.mgr.FPConstant(cast(int, formula.constant_value()),
+                                   formula.fp_exponent_width(),
+                                   formula.fp_significand_width())
+
+    def walk_rm_constant(self, formula: FNode, **kwargs) -> FNode:
+        return self.mgr.RoundingMode(cast(str, formula.constant_value()))
+
+    def walk_fp_abs(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPAbs(args[0])
+
+    def walk_fp_neg(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPNeg(args[0])
+
+    def walk_fp_is_normal(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPIsNormal(args[0])
+
+    def walk_fp_is_subnormal(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPIsSubnormal(args[0])
+
+    def walk_fp_is_zero(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPIsZero(args[0])
+
+    def walk_fp_is_infinite(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPIsInfinite(args[0])
+
+    def walk_fp_is_nan(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPIsNaN(args[0])
+
+    def walk_fp_is_negative(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPIsNegative(args[0])
+
+    def walk_fp_is_positive(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPIsPositive(args[0])
+
+    def walk_fp_sqrt(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPSqrt(args[0], args[1])
+
+    def walk_fp_round_to_integral(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPRoundToIntegral(args[0], args[1])
+
+    def walk_fp_min(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPMin(args[0], args[1])
+
+    def walk_fp_max(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPMax(args[0], args[1])
+
+    def walk_fp_le(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPLE(args[0], args[1])
+
+    def walk_fp_lt(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPLT(args[0], args[1])
+
+    def walk_fp_eq(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPEQ(args[0], args[1])
+
+    def walk_fp_add(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPAdd(args[0], args[1], args[2])
+
+    def walk_fp_sub(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPSub(args[0], args[1], args[2])
+
+    def walk_fp_mul(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPMul(args[0], args[1], args[2])
+
+    def walk_fp_div(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPDiv(args[0], args[1], args[2])
+
+    def walk_fp_to_ubv(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPToUBV(args[0], args[1], formula.bv_width())
+
+    def walk_fp_to_sbv(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPToSBV(args[0], args[1], formula.bv_width())
+
+    def walk_fp_to_fp(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPToFP(args[0], args[1], formula.fp_exponent_width(),
+                               formula.fp_significand_width())
+
+    def walk_fp_from_ubv(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPFromUBV(args[0], args[1], formula.fp_exponent_width(),
+                                  formula.fp_significand_width())
+
+    def walk_fp_from_sbv(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPFromSBV(args[0], args[1], formula.fp_exponent_width(),
+                                  formula.fp_significand_width())
+
+    def walk_fp_from_bits(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
+        return self.mgr.FPFromBits(args[0], formula.fp_exponent_width(),
+                                   formula.fp_significand_width())
+
     def walk_array_select(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         return self.mgr.Select(args[0], args[1])
 

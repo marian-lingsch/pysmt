@@ -629,6 +629,52 @@ QF_AUFBVLIRA = Logic(name="QF_AUFBVLIRA",
                      real_arithmetic=True)
 
 
+QF_FP = Logic(name="QF_FP",
+              description=\
+              """Quantifier free FloatingPoint""",
+              quantifier_free=True,
+              floating_point=True)
+
+
+QF_BVFP = Logic(name="QF_BVFP",
+                description=\
+                """Quantifier free BitVectors and FloatingPoint""",
+                quantifier_free=True,
+                bit_vectors=True,
+                floating_point=True)
+
+
+QF_FPLRA = Logic(name="QF_FPLRA",
+                 description=\
+                 """Quantifier free FloatingPoint and Linear Real Arithmetic""",
+                 quantifier_free=True,
+                 floating_point=True,
+                 real_arithmetic=True,
+                 real_difference=True)
+
+
+QF_ABVFP = Logic(name="QF_ABVFP",
+                 description=\
+                 """Quantifier free Arrays, BitVectors and FloatingPoint""",
+                 quantifier_free=True,
+                 arrays=True,
+                 bit_vectors=True,
+                 floating_point=True)
+
+
+QF_AUFBVFPLIRA = Logic(name="QF_AUFBVFPLIRA",
+                       description=\
+                       """Quantifier free Arrays, BitVectors, FloatingPoint and LIRA""",
+                       linear=True,
+                       uninterpreted=True,
+                       quantifier_free=True,
+                       arrays=True,
+                       bit_vectors=True,
+                       floating_point=True,
+                       integer_arithmetic=True,
+                       real_arithmetic=True)
+
+
 AUTO = Logic(name="Auto",
              description="Special logic used to indicate that the logic to be used depends on the formula.")
 
@@ -663,10 +709,15 @@ SMTLIB2_LOGICS = frozenset([AUFLIA,
                             QF_UFNRA,
                             QF_UFNIA,
                             QF_UFLIRA,
-                            QF_SLIA
+                            QF_SLIA,
+                            QF_FP,
+                            QF_BVFP,
+                            QF_FPLRA,
+                            QF_ABVFP,
                             ])
 
-LOGICS = SMTLIB2_LOGICS | frozenset([QF_BOOL, BOOL, QF_AUFBVLIRA, QF_NIRA])
+LOGICS = SMTLIB2_LOGICS | frozenset([QF_BOOL, BOOL, QF_AUFBVLIRA, QF_NIRA,
+                                     QF_AUFBVFPLIRA])
 
 QF_LOGICS = frozenset(_l for _l in LOGICS if _l.quantifier_free)
 
@@ -682,6 +733,7 @@ PYSMT_LOGICS = frozenset([QF_BOOL, QF_IDL, QF_LIA, QF_LRA, QF_RDL, QF_UF, QF_UFI
                           QF_ABV, QF_AUFBV, QF_AUFLIA, QF_ALIA, QF_AX,
                           QF_AUFBVLIRA,
                           QF_NRA, QF_NIA, QF_NIRA, UFBV, BV,
+                          QF_FP, QF_BVFP, QF_FPLRA, QF_ABVFP, QF_AUFBVFPLIRA,
                           ])
 
 # PySMT Logics includes additional features:

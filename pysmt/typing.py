@@ -22,6 +22,8 @@ In the current version these are:
  * Int
  * Real
  * BVType
+ * FPType
+ * RoundingMode
  * FunctionType
  * ArrayType
 
@@ -91,6 +93,12 @@ class PySMTType(object):
         return False
 
     def is_string_type(self) -> bool:
+        return False
+
+    def is_fp_type(self) -> bool:
+        return False
+
+    def is_rounding_mode_type(self) -> bool:
         return False
 
     def is_function_type(self) -> bool:
@@ -165,6 +173,14 @@ class _StringType(PySMTType):
     def is_string_type(self) -> bool:
         return True
 
+class _RoundingModeType(PySMTType):
+    def __init__(self):
+        decl = _TypeDecl("RoundingMode", 0)
+        PySMTType.__init__(self, decl=decl, args=None)
+
+    def is_rounding_mode_type(self) -> bool:
+        return True
+
 # End Basic Types Declarations
 
 
@@ -235,6 +251,48 @@ class _BVType(PySMTType):
         return hash(self.width)
 
 # EOC _BVType
+
+
+class _FPType(PySMTType):
+    """Internal class to represent a FloatingPoint type.
+
+    The significand width counts the hidden bit, as in SMT-LIB. This class
+    should not be instantiated directly, but the factory method FPType
+    should be used instead.
+    """
+    def __init__(self, exponent_width: int, significand_width: int):
+        decl = _TypeDecl("FP{%d,%d}" % (exponent_width, significand_width), 0)
+        PySMTType.__init__(self, decl=decl, args=None)
+        self._exponent_width = exponent_width
+        self._significand_width = significand_width
+
+    @property
+    def exponent_width(self) -> int:
+        return self._exponent_width
+
+    @property
+    def significand_width(self) -> int:
+        return self._significand_width
+
+    def is_fp_type(self) -> bool:
+        return True
+
+    def as_smtlib(self, funstyle: bool=True) -> str:
+        name = "(_ FloatingPoint %d %d)" % (self.exponent_width,
+                                            self.significand_width)
+        if funstyle:
+            return "() " + name
+        return name
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _FPType) and \
+            self.exponent_width == other.exponent_width and \
+            self.significand_width == other.significand_width
+
+    def __hash__(self) -> int:
+        return hash((self.exponent_width, self.significand_width))
+
+# EOC _FPType
 
 
 class _FunctionType(PySMTType):
@@ -365,6 +423,7 @@ BOOL = _BoolType()
 REAL = _RealType()
 INT =  _IntType()
 STRING = _StringType()
+ROUNDING_MODE = _RoundingModeType()
 PYSMT_TYPES = frozenset([BOOL, REAL, INT])
 
 # Helper Constants
@@ -376,6 +435,7 @@ class TypeManager(object):
 
     def __init__(self, environment: "pysmt.environment.Environment"): # type: ignore [name-defined]
         self._bv_types: Dict[int, _BVType] = {}
+        self._fp_types: Dict[Tuple[int, int], _FPType] = {}
         self._function_types: Dict[Tuple[PySMTType, Tuple[PySMTType, ...]], _FunctionType] = {}
         self._array_types: Dict[Tuple[PySMTType, PySMTType], _ArrayType] = {}
         self._custom_types: Dict[Tuple[Union[PySMTType, _TypeDecl], Tuple[PySMTType, ...]], PySMTType] = {}
@@ -384,6 +444,7 @@ class TypeManager(object):
         self._real: Optional[_RealType] = None
         self._int: Optional[_IntType] = None
         self._string: Optional[_StringType] = None
+        self._rounding_mode: Optional[_RoundingModeType] = None
         #
         self.load_global_types()
         self.environment = environment
@@ -397,6 +458,7 @@ class TypeManager(object):
         self._real = REAL
         self._int = INT
         self._string = STRING
+        self._rounding_mode = ROUNDING_MODE
 
     def BOOL(self) -> _BoolType:
         return assert_not_none(self._bool)
@@ -410,6 +472,9 @@ class TypeManager(object):
     def STRING(self) -> _StringType:
         return assert_not_none(self._string)
 
+    def ROUNDING_MODE(self) -> _RoundingModeType:
+        return assert_not_none(self._rounding_mode)
+
     def BVType(self, width: int=32) -> _BVType:
         """Returns the singleton associated to the BV type for the given width.
 
@@ -422,6 +487,19 @@ class TypeManager(object):
         except KeyError:
             ty = _BVType(width=width)
             self._bv_types[width] = ty
+        return ty
+
+    def FPType(self, exponent_width: int, significand_width: int) -> _FPType:
+        """Returns the singleton associated to the FP type of the given widths.
+
+        The significand width counts the hidden bit, as in SMT-LIB.
+        """
+        key = (exponent_width, significand_width)
+        try:
+            ty = self._fp_types[key]
+        except KeyError:
+            ty = _FPType(exponent_width, significand_width)
+            self._fp_types[key] = ty
         return ty
 
     def FunctionType(self, return_type: PySMTType, param_types: Sequence["PySMTType"]) -> "PySMTType":
@@ -513,10 +591,14 @@ class TypeManager(object):
             ty = stack.pop()
             if ty.arity == 0:
                 if (ty.is_bool_type() or ty.is_int_type() or
-                    ty.is_real_type() or ty.is_string_type()):
+                    ty.is_real_type() or ty.is_string_type() or
+                    ty.is_rounding_mode_type()):
                     myty = ty
                 elif ty.is_bv_type():
                     myty = self.BVType(cast(_BVType, ty).width)
+                elif ty.is_fp_type():
+                    fp_type = cast(_FPType, ty)
+                    myty = self.FPType(fp_type.exponent_width, fp_type.significand_width)
                 else:
                     myty = cast(PySMTType, self.Type(assert_not_none(ty.basename), arity=0))
                 typemap[ty] = myty
@@ -562,6 +644,11 @@ def BVType(width: int=32) ->  PySMTType:
     """Returns the BV type for the given width."""
     mgr : TypeManager = pysmt.environment.get_env().type_manager # type: ignore[attr-defined]
     return mgr.BVType(width=width)
+
+def FPType(exponent_width: int, significand_width: int) -> PySMTType:
+    """Returns the FP type of the given widths."""
+    mgr : TypeManager = pysmt.environment.get_env().type_manager # type: ignore[attr-defined]
+    return mgr.FPType(exponent_width, significand_width)
 
 def FunctionType(return_type:  PySMTType, param_types: List[ PySMTType]) ->  PySMTType:
     """Returns Function Type with the given arguments."""
