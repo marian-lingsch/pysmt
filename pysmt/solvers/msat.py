@@ -662,11 +662,15 @@ class MSatConverter(Converter, DagWalker):
                 res: PySMTType = types.INT
             elif self._msat_lib.msat_is_rational_type(self.msat_env(), ty):
                 res = types.REAL
+            elif self._msat_lib.msat_is_fp_type(self.msat_env(), ty)[0]:
+                res = self._msat_type_to_type(ty)
             else:
                 assert "_" in str(term), "Unrecognized type for '%s'" % str(term)
                 width = int(str(term).split("_")[1])
                 res = self.tm.BVType(width)
             return res
+        elif self._rounding_mode_name(term) is not None:
+            return types.ROUNDING_MODE
         elif self._msat_lib.msat_term_is_constant(self.msat_env(), term):
             ty = self._msat_lib.msat_term_get_type(term)
             return self._msat_type_to_type(ty)
@@ -755,15 +759,26 @@ class MSatConverter(Converter, DagWalker):
                 res = self.mgr.Int(int(self._msat_lib.msat_term_repr(term)))
             elif self._msat_lib.msat_is_rational_type(self.msat_env(), ty):
                 res = self.mgr.Real(Fraction(self._msat_lib.msat_term_repr(term)))
+            elif self._msat_lib.msat_is_fp_type(self.msat_env(), ty)[0]:
+                # MathSAT prints the IEEE bits and the widths of the number
+                fp_type = cast(types._FPType, self._msat_type_to_type(ty))
+                bits = int(self._msat_lib.msat_term_repr(term).split("_")[0])
+                res = self.mgr.FPConstant(bits, fp_type.exponent_width,
+                                          fp_type.significand_width)
             else:
                 assert "_" in str(term), "Unsupported type for '%s'" % str(term)
                 val, width = map(int, str(term).split("_"))
                 res = self.mgr.BV(val, width)
+        elif self._rounding_mode_name(term) is not None:
+            res = self.mgr.RoundingMode(assert_not_none(self._rounding_mode_name(term)))
         elif self._msat_lib.msat_term_is_constant(self.msat_env(), term):
             rep = self._restore_empty(self._msat_lib.msat_term_repr(term))
             ty = self._msat_lib.msat_term_get_type(term)
             if self._msat_lib.msat_term_is_boolean_constant(self.msat_env(), term):
                 res = self.mgr.Symbol(rep, types.BOOL)
+            elif self._msat_lib.msat_is_fp_type(self.msat_env(), ty)[0] or \
+                 self._msat_lib.msat_is_fp_roundingmode_type(self.msat_env(), ty):
+                res = self.mgr.Symbol(rep, self._msat_type_to_type(ty))
             elif self._msat_lib.msat_is_rational_type(self.msat_env(), ty):
                 res = self.mgr.Symbol(rep, types.REAL)
             elif self._msat_lib.msat_is_integer_type(self.msat_env(), ty):
@@ -787,6 +802,19 @@ class MSatConverter(Converter, DagWalker):
             raise ConvertExpressionError("Unsupported expression:",
                                          self._msat_lib.msat_term_repr(term))
         return res
+
+    def _rounding_mode_name(self, term: Any) -> Optional[str]:
+        """The SMT-LIB name of the rounding mode, or None if the term is none."""
+        env = self.msat_env()
+        if self._msat_lib.msat_term_is_fp_roundingmode_nearest_even(env, term):
+            return "RNE"
+        if self._msat_lib.msat_term_is_fp_roundingmode_plus_inf(env, term):
+            return "RTP"
+        if self._msat_lib.msat_term_is_fp_roundingmode_minus_inf(env, term):
+            return "RTN"
+        if self._msat_lib.msat_term_is_fp_roundingmode_zero(env, term):
+            return "RTZ"
+        return None
 
     def get_symbol_from_declaration(self, decl):
         return self.decl_to_symbol[self._msat_lib.msat_decl_id(decl)]
@@ -1099,6 +1127,114 @@ class MSatConverter(Converter, DagWalker):
     def walk_int_to_bv(self, formula: FNode, args: List[Any], **kwargs) -> Any:
         return self._msat_lib.msat_make_int_to_bv(self.msat_env(), formula.bv_width(), args[0])
 
+    # MathSAT counts the significand width without the hidden bit, which
+    # pySMT counts as SMT-LIB does
+    def walk_fp_constant(self, formula: FNode, **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_bits_number(
+            self.msat_env(), str(formula.constant_value()),
+            formula.fp_exponent_width(), formula.fp_significand_width() - 1)
+
+    def walk_rm_constant(self, formula: FNode, **kwargs) -> Any:
+        makers = {
+            "RNE": self._msat_lib.msat_make_fp_roundingmode_nearest_even,
+            "RTP": self._msat_lib.msat_make_fp_roundingmode_plus_inf,
+            "RTN": self._msat_lib.msat_make_fp_roundingmode_minus_inf,
+            "RTZ": self._msat_lib.msat_make_fp_roundingmode_zero,
+        }
+        if formula.constant_value() not in makers:
+            raise ConvertExpressionError(
+                message="MathSAT does not support the rounding mode %s"
+                % formula.constant_value(), expression=formula)
+        return makers[cast(str, formula.constant_value())](self.msat_env())
+
+    def walk_fp_abs(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_abs(self.msat_env(), *args)
+
+    def walk_fp_neg(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_neg(self.msat_env(), *args)
+
+    def walk_fp_add(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_plus(self.msat_env(), *args)
+
+    def walk_fp_sub(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_minus(self.msat_env(), *args)
+
+    def walk_fp_mul(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_times(self.msat_env(), *args)
+
+    def walk_fp_div(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_div(self.msat_env(), *args)
+
+    def walk_fp_sqrt(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_sqrt(self.msat_env(), *args)
+
+    def walk_fp_round_to_integral(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_round_to_int(self.msat_env(), *args)
+
+    def walk_fp_min(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_min(self.msat_env(), *args)
+
+    def walk_fp_max(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_max(self.msat_env(), *args)
+
+    def walk_fp_le(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_leq(self.msat_env(), *args)
+
+    def walk_fp_lt(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_lt(self.msat_env(), *args)
+
+    def walk_fp_eq(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_equal(self.msat_env(), *args)
+
+    def walk_fp_is_normal(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_isnormal(self.msat_env(), *args)
+
+    def walk_fp_is_subnormal(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_issubnormal(self.msat_env(), *args)
+
+    def walk_fp_is_zero(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_iszero(self.msat_env(), *args)
+
+    def walk_fp_is_infinite(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_isinf(self.msat_env(), *args)
+
+    def walk_fp_is_nan(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_isnan(self.msat_env(), *args)
+
+    def walk_fp_is_negative(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_isneg(self.msat_env(), *args)
+
+    def walk_fp_is_positive(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_ispos(self.msat_env(), *args)
+
+    def walk_fp_to_ubv(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_to_ubv(self.msat_env(),
+                                                  formula.bv_width(), *args)
+
+    def walk_fp_to_sbv(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_to_sbv(self.msat_env(),
+                                                  formula.bv_width(), *args)
+
+    def walk_fp_to_fp(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_cast(
+            self.msat_env(), formula.fp_exponent_width(),
+            formula.fp_significand_width() - 1, *args)
+
+    def walk_fp_from_ubv(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_from_ubv(
+            self.msat_env(), formula.fp_exponent_width(),
+            formula.fp_significand_width() - 1, *args)
+
+    def walk_fp_from_sbv(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_from_sbv(
+            self.msat_env(), formula.fp_exponent_width(),
+            formula.fp_significand_width() - 1, *args)
+
+    def walk_fp_from_bits(self, formula: FNode, args: List[Any], **kwargs) -> Any:
+        return self._msat_lib.msat_make_fp_from_ieeebv(
+            self.msat_env(), formula.fp_exponent_width(),
+            formula.fp_significand_width() - 1, args[0])
+
     def walk_array_select(self, formula: FNode, args: List[Any], **kwargs) -> Any:
         return self._msat_lib.msat_make_array_read(self.msat_env(), args[0], args[1])
 
@@ -1145,6 +1281,13 @@ class MSatConverter(Converter, DagWalker):
             return msat_type
         elif tp.is_bv_type():
             return self._msat_lib.msat_get_bv_type(self.msat_env(), cast(types._BVType, tp).width)
+        elif tp.is_fp_type():
+            fp_type = cast(types._FPType, tp)
+            return self._msat_lib.msat_get_fp_type(self.msat_env(),
+                                                   fp_type.exponent_width,
+                                                   fp_type.significand_width - 1)
+        elif tp.is_rounding_mode_type():
+            return self._msat_lib.msat_get_fp_roundingmode_type(self.msat_env())
         elif tp.is_custom_type():
             return self._msat_lib.msat_get_simple_type(self.msat_env(), str(tp))
         else:
@@ -1170,6 +1313,13 @@ class MSatConverter(Converter, DagWalker):
             check_bv, bv_width = self._msat_lib.msat_is_bv_type(self.msat_env(), tp)
             if check_bv != 0:
                 return self.tm.BVType(bv_width)
+
+            check_fp, exponent_width, mantissa_width = \
+                self._msat_lib.msat_is_fp_type(self.msat_env(), tp)
+            if check_fp != 0:
+                return self.tm.FPType(exponent_width, mantissa_width + 1)
+            if self._msat_lib.msat_is_fp_roundingmode_type(self.msat_env(), tp):
+                return types.ROUNDING_MODE
 
             # It must be a function type, currently unsupported
             raise NotImplementedError("Function types are unsupported")
