@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, 
 
 from pysmt.constants import Fraction, is_pysmt_fraction, is_pysmt_integer
 
-from pysmt.logics import Logic, LRA, LIA, QF_UFLIA, QF_UFLRA, QF_BV, PYSMT_QF_LOGICS, QF_ALIA
+from pysmt.logics import Logic, LRA, LIA, QF_BV, PYSMT_QF_LOGICS
 from pysmt.oracles import get_logic
 
 from pysmt.solvers.dynmsat import MSATLibLoader, MSATCreateEnv, MSATCreateConverter
@@ -1456,7 +1456,8 @@ class MSatInterpolator(Interpolator):
 
     __lib_name__ = "mathsat"
 
-    LOGICS = [QF_UFLIA, QF_UFLRA, QF_BV, QF_ALIA]
+    # MathSAT reports a theory it cannot interpolate in as an error
+    LOGICS = MathSAT5Solver.LOGICS
 
     def __init__(self, environment, logic=None):
         Interpolator.__init__(self)
@@ -1469,15 +1470,6 @@ class MSatInterpolator(Interpolator):
     def _exit(self):
         del self.msat_env
 
-    def _check_logic(self, formulas):
-        for f in formulas:
-            logic = get_logic(f, self.environment)
-            ok = any(logic <= l for l in self.LOGICS)
-            if not ok:
-                raise PysmtValueError("Logic not supported by MathSAT "
-                                      "interpolation. (detected logic is: %s)" \
-                                      % str(logic))
-
     def binary_interpolant(self, a, b):
         res = self.sequence_interpolant([a, b])
         if res is not None:
@@ -1487,17 +1479,19 @@ class MSatInterpolator(Interpolator):
     def sequence_interpolant(self, formulas):
         cfg, env = None, None
         try:
-            self._check_logic(formulas)
-
             if len(formulas) < 2:
                 raise PysmtValueError("interpolation needs at least 2 formulae")
 
             cfg = self._msat_lib.msat_create_config()
             self._msat_lib.msat_set_option(cfg, "interpolation", "true")
+            # The eager bit-vector solver gives no proofs
+            self._msat_lib.msat_set_option(cfg, "theory.bv.eager", "false")
             if self.logic == QF_BV:
-                self._msat_lib.msat_set_option(cfg, "theory.bv.eager", "false")
                 self._msat_lib.msat_set_option(cfg, "theory.eq_propagaion", "false")
             env = self._do_create_env(cfg, self.msat_env())
+            # MathSAT 5.6.19 can crash in msat_destroy_env after a proof over
+            # bit-vectors, but not after backtracking over the proof
+            self._msat_lib.msat_push_backtrack_point(env)
 
             groups = []
             for f in formulas:
@@ -1530,6 +1524,7 @@ class MSatInterpolator(Interpolator):
             if cfg:
                 self._msat_lib.msat_destroy_config(cfg)
             if env:
+                self._msat_lib.msat_pop_backtrack_point(env)
                 self._msat_lib.msat_destroy_env(env)
 
     def _do_create_env(self, msat_config=None, msat_env=None):

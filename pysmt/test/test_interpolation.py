@@ -16,7 +16,7 @@
 #   limitations under the License.
 #
 from pysmt.shortcuts import *
-from pysmt.typing import REAL, INT
+from pysmt.typing import REAL, INT, BVType, ArrayType
 from pysmt.test import TestCase, skipIfSolverNotAvailable, main
 from pysmt.exceptions import NoSolverAvailableError
 from pysmt.logics import UFLIRA
@@ -37,6 +37,30 @@ class TestInterpolation(TestCase):
     @skipIfSolverNotAvailable('msat')
     def test_sequence_interpolant_msat(self):
         self._test_sequence_interpolant('msat')
+
+    @skipIfSolverNotAvailable('msat')
+    def test_arrays_with_bv_and_int_msat(self):
+        i, v = Symbol("i", INT), Symbol("v", BVType(8))
+        arr = Symbol("arr", ArrayType(INT, BVType(8)))
+        a = And(Equals(Select(arr, i), BV(1, 8)), Equals(v, Select(arr, i)))
+        b = Equals(v, BV(2, 8))
+
+        with Interpolator(name='msat') as itp:
+            interpolant = itp.binary_interpolant(a, b)
+
+        self.assertValid(Implies(a, interpolant))
+        self.assertUnsat(And(interpolant, b))
+
+    @skipIfSolverNotAvailable('msat')
+    def test_bv_proof_msat(self):
+        # MathSAT 5.6.19 crashed on destroying the environment of this proof
+        j = Symbol("j", BVType(2))
+        a = Equals(BVURem(j, BV(2, 2)), BV(2, 2))
+
+        with Interpolator(name='msat') as itp:
+            interpolants = itp.sequence_interpolant([a, TRUE()])
+
+        self.assertEqual(interpolants, [FALSE()])
 
     def _test_binary_interpolant(self, name):
         itp = Interpolator(name=name)
