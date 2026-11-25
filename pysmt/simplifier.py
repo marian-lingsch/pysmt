@@ -1022,7 +1022,7 @@ class Simplifier(pysmt.walkers.DagWalker):
         return self.manager.IntToBV(args[0], width)
 
     @handles(op.FP_OPERATORS | op.FP_RELATIONS)
-    @handles(op.FP_CONSTANT, op.RM_CONSTANT)
+    @handles(op.FP_CONSTANT, op.RM_CONSTANT, op.ENUM_CONSTANT)
     def walk_fp(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         """Rebuilds the FloatingPoint term, which is not simplified, over the simplified args."""
         return self.manager.create_node(formula.node_type(), tuple(args),

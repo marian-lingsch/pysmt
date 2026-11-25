@@ -17,7 +17,7 @@
 #
 from __future__ import absolute_import
 from fractions import Fraction as pyFraction
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Type, cast
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Type, cast
 
 from pysmt.exceptions import SolverAPINotFound
 from pysmt.environment import Environment
@@ -84,10 +84,11 @@ def askey(n: z3.ExprRef) -> AstRefKey:
 
 class Z3Model(Model):
 
-    def __init__(self, environment: Environment, z3_model: z3.ModelRef):
+    def __init__(self, environment: Environment, z3_model: z3.ModelRef, converter: Optional["Z3Converter"]=None):
         Model.__init__(self, environment)
         self.z3_model = z3_model
-        self.converter = Z3Converter(environment, z3_model.ctx)
+        # The converter of the solver knows the sorts it declared
+        self.converter = converter if converter is not None else Z3Converter(environment, z3_model.ctx)
 
     def get_value(self, formula: FNode, model_completion: bool=True) -> FNode:
         titem = self.converter.convert(formula)
@@ -207,7 +208,7 @@ class Z3Solver(IncrementalTrackingSolver, UnsatCoreSolver, SmtLibBasicSolver):
             return formula
 
     def get_model(self) -> Z3Model:
-        return Z3Model(self.environment, self.z3.model())
+        return Z3Model(self.environment, self.z3.model(), self.converter)
 
     @clear_pending_pop
     def _solve(self, assumptions: Optional[List[FNode]]=None) -> bool:
@@ -411,6 +412,11 @@ class Z3Converter(Converter, DagWalker):
         self._z3ArraySorts: Dict[Any, Any] = {}
         self._z3BitVecSorts: Dict[int, z3.BitVecSortRef] = {}
         self._z3Sorts: Dict[str, Any] = {}
+        # Maps the name of an enumeration type into the Z3 sort, its values and the pySMT type.
+        # Z3 declares a sort once per context, which the converters of several solvers share.
+        if not hasattr(self.ctx, "pysmt_enum_sorts"):
+            self.ctx.pysmt_enum_sorts = {}
+        self._z3EnumSorts: Dict[str, Tuple[Any, List[Any], PySMTType]] = self.ctx.pysmt_enum_sorts
         # Unique reference to Function Declaration
         self._z3_func_decl_cache: Dict[FNode, Any] = {}
         return
@@ -445,6 +451,14 @@ class Z3Converter(Converter, DagWalker):
             self._z3Sorts[name] = sort
         return sort
 
+    def z3EnumSort(self, tp: PySMTType) -> Tuple[Any, List[Any], PySMTType]:
+        """Return the z3 sort, the values and the pySMT type of the enumeration type."""
+        name = str(tp)
+        if name not in self._z3EnumSorts:
+            sort, values = z3.EnumSort(name, list(cast(types._EnumType, tp).constructors), ctx=self.ctx)
+            self._z3EnumSorts[name] = (sort, values, tp)
+        return self._z3EnumSorts[name]
+
     def get_z3_ref(self, formula: FNode) -> Type[z3.ExprRef]:
         if formula.node_type in op.QUANTIFIERS:
             return z3.QuantifierRef
@@ -469,6 +483,8 @@ class Z3Converter(Converter, DagWalker):
                 return z3.ArrayRef
             elif type_.is_bv_type():
                 return z3.BitVecRef
+            elif type_.is_enum_type():
+                return z3.DatatypeRef
             else:
                 raise NotImplementedError(formula)
         elif formula.node_type() in op.ARRAY_OPERATORS:
@@ -487,6 +503,8 @@ class Z3Converter(Converter, DagWalker):
                 return z3.ArrayRef
             elif type_.is_bv_type():
                 return z3.BitVecRef
+            elif type_.is_enum_type():
+                return z3.DatatypeRef
             else:
                 raise NotImplementedError(formula)
 
@@ -585,6 +603,10 @@ class Z3Converter(Converter, DagWalker):
             elif z3.is_algebraic_value(expr):
                 # Algebraic value
                 return self.mgr._Algebraic(Numeral(expr))
+            elif str(expr.sort()) in self._z3EnumSorts and \
+                 expr.decl().kind() == z3.Z3_OP_DT_CONSTRUCTOR:
+                enum_type = self._z3EnumSorts[str(expr.sort())][2]
+                return self.mgr.EnumConstant(expr.decl().name(), enum_type)
             elif z3.is_infinite(expr):
                 raise PysmtInfinityError("Found an expression representing an infinite value")
             elif z3.is_epsilon(expr):
@@ -793,6 +815,14 @@ class Z3Converter(Converter, DagWalker):
         z3.Z3_inc_ref(self.ctx.ref(), z3term)
         return z3term
 
+    def walk_enum_constant(self, formula: FNode, **kwargs) -> z3.Ast:
+        enum_type = formula.constant_type()
+        _, values, _ = self.z3EnumSort(enum_type)
+        index = cast(types._EnumType, enum_type).constructors.index(formula.constant_value())
+        z3term = values[index].as_ast()
+        z3.Z3_inc_ref(self.ctx.ref(), z3term)
+        return z3term
+
     def walk_bv_constant(self, formula: FNode, **kwargs) -> z3.Ast:
         value = formula.constant_value()
         z3term = z3.Z3_mk_numeral(self.ctx.ref(),
@@ -906,6 +936,8 @@ class Z3Converter(Converter, DagWalker):
                 self._z3_to_type(sort.range()))
         elif sort.kind() == z3.Z3_BV_SORT:
             return self.env.type_manager.BVType(sort.size())
+        elif sort.kind() == z3.Z3_DATATYPE_SORT and str(sort) in self._z3EnumSorts:
+            return self._z3EnumSorts[str(sort)][2]
         else:
             raise NotImplementedError("Unsupported sort in conversion: %s" % sort)
 
@@ -971,6 +1003,8 @@ class Z3Converter(Converter, DagWalker):
             return self.z3ArraySort(key_sort, val_sort)
         elif tp.is_bv_type():
             return self.z3BitVecSort(cast(types._BVType, tp).width)
+        elif tp.is_enum_type():
+            return self.z3EnumSort(tp)[0]
         else:
             assert tp.is_custom_type(), "Unsupported type '%s'" % tp
             return self.z3Sort(tp)

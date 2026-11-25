@@ -247,6 +247,9 @@ class IdentityDagWalker(DagWalker):
     def walk_rm_constant(self, formula: FNode, **kwargs) -> FNode:
         return self.mgr.RoundingMode(cast(str, formula.constant_value()))
 
+    def walk_enum_constant(self, formula: FNode, **kwargs) -> FNode:
+        return self.mgr.EnumConstant(cast(str, formula.constant_value()), formula.constant_type())
+
     def walk_fp_abs(self, formula: FNode, args: List[FNode], **kwargs) -> FNode:
         return self.mgr.FPAbs(args[0])
 

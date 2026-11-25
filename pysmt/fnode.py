@@ -44,7 +44,7 @@ from pysmt.operators import (FORALL, EXISTS, AND, OR, NOT, IMPLIES, IFF,
                              STR_CONSTANT,
                              ARRAY_SELECT, ARRAY_STORE, ARRAY_VALUE,
                              ALGEBRAIC_CONSTANT,
-                             FP_CONSTANT, RM_CONSTANT,
+                             FP_CONSTANT, RM_CONSTANT, ENUM_CONSTANT,
                              FP_TO_UBV, FP_TO_SBV, FP_TO_FP,
                              FP_FROM_UBV, FP_FROM_SBV, FP_FROM_BITS)
 
@@ -185,6 +185,9 @@ class FNode(object):
             if _type.is_rounding_mode_type() and \
                self.node_type() != RM_CONSTANT:
                 return False
+            if _type.is_enum_type() and \
+               (self.node_type() != ENUM_CONSTANT or self._content.payload[1] != _type):
+                return False
 
         return value is None or value == self.constant_value()
 
@@ -227,6 +230,10 @@ class FNode(object):
     def is_rm_constant(self) -> bool:
         """Test whether the formula is a RoundingMode constant."""
         return self.node_type() == RM_CONSTANT
+
+    def is_enum_constant(self) -> bool:
+        """Test whether the formula is a value of an enumeration type."""
+        return self.node_type() == ENUM_CONSTANT
 
     def is_string_constant(self, value: Optional[str]=None) -> bool:
         """Test whether the formula is a String constant.
@@ -608,7 +615,7 @@ class FNode(object):
     def constant_value(self) -> Union[str, bool, Fraction, int]:
         """Return the value of the Constant."""
         assert self.is_constant(), "%s is not a constant" % str(self)
-        if self.node_type() in (BV_CONSTANT, FP_CONSTANT):
+        if self.node_type() in (BV_CONSTANT, FP_CONSTANT, ENUM_CONSTANT):
             return self._content.payload[0]
         return self._content.payload
 
@@ -626,6 +633,8 @@ class FNode(object):
             return FPType(self.fp_exponent_width(), self.fp_significand_width())
         elif self.node_type() == RM_CONSTANT:
             return ROUNDING_MODE
+        elif self.node_type() == ENUM_CONSTANT:
+            return self._content.payload[1]
         else:
             assert self.node_type() == BV_CONSTANT,\
                 "Unsupported method constant_type '%s'" % self

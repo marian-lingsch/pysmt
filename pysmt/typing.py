@@ -24,6 +24,7 @@ In the current version these are:
  * BVType
  * FPType
  * RoundingMode
+ * EnumType
  * FunctionType
  * ArrayType
 
@@ -99,6 +100,9 @@ class PySMTType(object):
         return False
 
     def is_rounding_mode_type(self) -> bool:
+        return False
+
+    def is_enum_type(self) -> bool:
         return False
 
     def is_function_type(self) -> bool:
@@ -295,6 +299,37 @@ class _FPType(PySMTType):
 # EOC _FPType
 
 
+class _EnumType(PySMTType):
+    """Internal class to represent an enumeration type, i.e., an SMT-LIB
+    datatype whose constructors have no arguments.
+
+    This class should not be instantiated directly, but the factory
+    method EnumType should be used instead.
+    """
+    def __init__(self, name: str, constructors: Sequence[str]):
+        decl = _TypeDecl(name, 0)
+        PySMTType.__init__(self, decl=decl, args=None)
+        self._constructors = tuple(constructors)
+
+    @property
+    def constructors(self) -> Tuple[str, ...]:
+        """The values of the type, in the order of their declaration."""
+        return self._constructors
+
+    def is_enum_type(self) -> bool:
+        return True
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _EnumType) and \
+            self.name == other.name and \
+            self.constructors == other.constructors
+
+    def __hash__(self) -> int:
+        return hash((self.name, self._constructors))
+
+# EOC _EnumType
+
+
 class _FunctionType(PySMTType):
     """Internal class used to represent a Function type.
 
@@ -436,6 +471,7 @@ class TypeManager(object):
     def __init__(self, environment: "pysmt.environment.Environment"): # type: ignore [name-defined]
         self._bv_types: Dict[int, _BVType] = {}
         self._fp_types: Dict[Tuple[int, int], _FPType] = {}
+        self._enum_types: Dict[str, _EnumType] = {}
         self._function_types: Dict[Tuple[PySMTType, Tuple[PySMTType, ...]], _FunctionType] = {}
         self._array_types: Dict[Tuple[PySMTType, PySMTType], _ArrayType] = {}
         self._custom_types: Dict[Tuple[Union[PySMTType, _TypeDecl], Tuple[PySMTType, ...]], PySMTType] = {}
@@ -500,6 +536,28 @@ class TypeManager(object):
         except KeyError:
             ty = _FPType(exponent_width, significand_width)
             self._fp_types[key] = ty
+        return ty
+
+    def EnumType(self, name: str, constructors: Sequence[str]) -> _EnumType:
+        """Returns the singleton of the enumeration type of the given name.
+
+        This is equivalent to an SMT-LIB "declare-datatypes" of one sort
+        whose constructors have no arguments. A name can only be declared
+        with one list of constructors.
+        """
+        constructors = tuple(constructors)
+        try:
+            ty = self._enum_types[name]
+        except KeyError:
+            if not constructors or len(set(constructors)) != len(constructors):
+                raise PysmtValueError("An enumeration type needs distinct "
+                                      "constructors, got %s" % (constructors,))
+            ty = _EnumType(name, constructors)
+            self._enum_types[name] = ty
+        if ty.constructors != constructors:
+            raise PysmtValueError("Enumeration type %s previously declared "
+                                  "with the constructors %s"
+                                  % (name, ty.constructors))
         return ty
 
     def FunctionType(self, return_type: PySMTType, param_types: Sequence["PySMTType"]) -> "PySMTType":
@@ -599,6 +657,9 @@ class TypeManager(object):
                 elif ty.is_fp_type():
                     fp_type = cast(_FPType, ty)
                     myty = self.FPType(fp_type.exponent_width, fp_type.significand_width)
+                elif ty.is_enum_type():
+                    enum_type = cast(_EnumType, ty)
+                    myty = self.EnumType(assert_not_none(enum_type.basename), enum_type.constructors)
                 else:
                     myty = cast(PySMTType, self.Type(assert_not_none(ty.basename), arity=0))
                 typemap[ty] = myty

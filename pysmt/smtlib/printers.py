@@ -178,6 +178,10 @@ class SmtPrinter(TreeWalker):
     def walk_rm_constant(self, formula):
         self.write(formula.constant_value())
 
+    @write_annotations
+    def walk_enum_constant(self, formula):
+        self.write(quote(formula.constant_value()))
+
     def walk_array_select(self, formula): return self.walk_nary(formula, "select")
     def walk_array_store(self, formula): return self.walk_nary(formula, "store")
 
@@ -572,6 +576,10 @@ class SmtDagPrinter(DagWalker):
     @write_annotations_dag
     def walk_rm_constant(self, formula: FNode, **kwargs) -> str:
         return str(formula.constant_value())
+
+    @write_annotations_dag
+    def walk_enum_constant(self, formula: FNode, **kwargs) -> str:
+        return quote(str(formula.constant_value()))
 
     def walk_array_select(self, formula: FNode, args: List[str]) -> str:
         return self.walk_nary(formula, args, "select")

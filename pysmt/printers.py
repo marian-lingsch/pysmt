@@ -323,6 +323,9 @@ class HRPrinter(TreeWalker):
     def walk_rm_constant(self, formula: FNode) -> None:
         self.write(cast(str, formula.constant_value()))
 
+    def walk_enum_constant(self, formula: FNode) -> None:
+        self.write(cast(str, formula.constant_value()))
+
     def walk_fp_abs(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.abs")
     def walk_fp_neg(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.neg")
     def walk_fp_add(self, formula: FNode) -> Iterator[FNode]: return self.walk_application(formula, "fp.add")

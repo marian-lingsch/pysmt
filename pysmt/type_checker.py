@@ -338,6 +338,12 @@ class SimpleTypeChecker(walkers.DagWalker):
         assert len(args) == 0
         return ROUNDING_MODE
 
+    @walkers.handles(op.ENUM_CONSTANT)
+    def walk_identity_enum(self, formula: FNode, args: List[Any], **kwargs) -> Optional[PySMTType]:
+        #pylint: disable=unused-argument
+        assert len(args) == 0
+        return formula.constant_type()
+
     def walk_symbol(self, formula: FNode, args: List[Any], **kwargs) -> Optional[PySMTType]:
         assert formula is not None
         assert len(args) == 0
