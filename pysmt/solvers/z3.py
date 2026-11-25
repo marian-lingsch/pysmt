@@ -84,10 +84,11 @@ def askey(n: z3.ExprRef) -> AstRefKey:
 
 class Z3Model(Model):
 
-    def __init__(self, environment: Environment, z3_model: z3.ModelRef):
+    def __init__(self, environment: Environment, z3_model: z3.ModelRef, converter: Optional["Z3Converter"]=None):
         Model.__init__(self, environment)
         self.z3_model = z3_model
-        self.converter = Z3Converter(environment, z3_model.ctx)
+        # The converter of the solver knows the sorts it declared
+        self.converter = converter if converter is not None else Z3Converter(environment, z3_model.ctx)
 
     def get_value(self, formula: FNode, model_completion: bool=True) -> FNode:
         titem = self.converter.convert(formula)
@@ -207,7 +208,7 @@ class Z3Solver(IncrementalTrackingSolver, UnsatCoreSolver, SmtLibBasicSolver):
             return formula
 
     def get_model(self) -> Z3Model:
-        return Z3Model(self.environment, self.z3.model())
+        return Z3Model(self.environment, self.z3.model(), self.converter)
 
     @clear_pending_pop
     def _solve(self, assumptions: Optional[List[FNode]]=None) -> bool:

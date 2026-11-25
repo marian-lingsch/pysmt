@@ -79,11 +79,13 @@ class MathSAT5Model(Model):
 
     __lib_name__ = "mathsat"
 
-    def __init__(self, environment: Environment, msat_env: MSatEnv):
+    def __init__(self, environment: Environment, msat_env: MSatEnv, converter: Optional["MSatConverter"]=None):
         Model.__init__(self, environment)
         self._msat_lib = MSATLibLoader(self.__class__.__lib_name__)
         self.msat_env = msat_env
-        self.converter = MSATCreateConverter(self.__class__.__lib_name__, environment, self.msat_env)
+        # The converter of the solver knows the types and functions it declared
+        self.converter = converter if converter is not None else \
+            MSATCreateConverter(self.__class__.__lib_name__, environment, self.msat_env)
         self.msat_model = None
 
         msat_model = self._msat_lib.msat_get_model(self.msat_env())
@@ -422,7 +424,7 @@ class MathSAT5Solver(IncrementalTrackingSolver, UnsatCoreSolver, SmtLibBasicSolv
         return val
 
     def get_model(self) -> MathSAT5Model:
-        return MathSAT5Model(self.environment, self.msat_env)
+        return MathSAT5Model(self.environment, self.msat_env, self.converter)
 
     def _exit(self):
         del self.msat_env
