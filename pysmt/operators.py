@@ -25,7 +25,7 @@ from itertools import chain
 from typing import List
 
 
-ALL_TYPES = list(range(0,96))
+ALL_TYPES = list(range(0,97))
 
 (
 FORALL, EXISTS, AND, OR, NOT, IMPLIES, IFF, # Boolean Logic (0-6)
@@ -97,6 +97,7 @@ FP_TO_UBV, FP_TO_SBV,                       # FP to BV Conversion (90-91)
 FP_TO_FP,                                   # FP to FP Conversion (92)
 FP_FROM_UBV, FP_FROM_SBV,                   # BV to FP Conversion (93-94)
 FP_FROM_BITS,                               # IEEE Bits to FP Conversion (95)
+ENUM_CONSTANT,                              # Value of an enumeration type (96)
 ) = ALL_TYPES
 
 QUANTIFIERS = frozenset([FORALL, EXISTS])
@@ -107,7 +108,7 @@ BOOL_OPERATORS = frozenset(QUANTIFIERS | BOOL_CONNECTIVES)
 
 CONSTANTS = frozenset([BOOL_CONSTANT, REAL_CONSTANT, INT_CONSTANT,
                        BV_CONSTANT, STR_CONSTANT, ALGEBRAIC_CONSTANT,
-                       FP_CONSTANT, RM_CONSTANT])
+                       FP_CONSTANT, RM_CONSTANT, ENUM_CONSTANT])
 
 # Relations are predicates on theory atoms.
 # Relations have boolean type. They are a subset of the operators for a theory
@@ -285,4 +286,5 @@ __OP_STR__ = {
     FP_FROM_UBV: "FP_FROM_UBV",
     FP_FROM_SBV: "FP_FROM_SBV",
     FP_FROM_BITS: "FP_FROM_BITS",
+    ENUM_CONSTANT: "ENUM_CONSTANT",
 }

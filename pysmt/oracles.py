@@ -178,7 +178,7 @@ class TheoryOracle(walkers.DagWalker):
             theory = theory.combine(self._theory_from_type(ty.elem_type))
         elif ty.is_string_type():
             theory.strings = True
-        elif ty.is_custom_type():
+        elif ty.is_custom_type() or ty.is_enum_type():
             theory.custom_type = True
         else:
             # ty is either a function type
@@ -205,7 +205,7 @@ class TheoryOracle(walkers.DagWalker):
     @walkers.handles(op.INT_CONSTANT, op.BV_CONSTANT)
     @walkers.handles(op.ALGEBRAIC_CONSTANT)
     @walkers.handles(op.STR_CONSTANT)
-    @walkers.handles(op.FP_CONSTANT, op.RM_CONSTANT)
+    @walkers.handles(op.FP_CONSTANT, op.RM_CONSTANT, op.ENUM_CONSTANT)
     def walk_constant(self, formula: FNode, args: List[Theory], **kwargs) -> Theory:
         """Returns a new theory object with the type of the constant."""
         #pylint: disable=unused-argument
@@ -222,6 +222,8 @@ class TheoryOracle(walkers.DagWalker):
             theory_out.strings = True
         elif formula.is_fp_constant() or formula.is_rm_constant():
             theory_out.floating_point = True
+        elif formula.is_enum_constant():
+            theory_out.custom_type = True
         else:
             assert formula.is_bool_constant()
         return theory_out

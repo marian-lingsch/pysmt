@@ -448,6 +448,8 @@ class MSatConverter(Converter, DagWalker):
         # Maps a msat_decl instance inside the msat_env into the corresponding
         # Symbol
         self.decl_to_symbol: Dict[Any, FNode] = {}
+        # Maps the name of an enumeration type into the MathSAT type and the pySMT type
+        self._enum_types: Dict[str, Tuple[Any, PySMTType]] = {}
 
         self.boolType = self._msat_lib.msat_get_bool_type(self.msat_env())
         self.realType = self._msat_lib.msat_get_rational_type(self.msat_env())
@@ -673,7 +675,8 @@ class MSatConverter(Converter, DagWalker):
             return res
         elif self._rounding_mode_name(term) is not None:
             return types.ROUNDING_MODE
-        elif self._msat_lib.msat_term_is_constant(self.msat_env(), term):
+        elif self._msat_lib.msat_term_is_constant(self.msat_env(), term) or \
+             self._msat_lib.msat_term_is_enum_value(self.msat_env(), term):
             ty = self._msat_lib.msat_term_get_type(term)
             return self._msat_type_to_type(ty)
         elif self._msat_lib.msat_term_is_uf(self.msat_env(), term):
@@ -773,6 +776,9 @@ class MSatConverter(Converter, DagWalker):
                 res = self.mgr.BV(val, width)
         elif self._rounding_mode_name(term) is not None:
             res = self.mgr.RoundingMode(assert_not_none(self._rounding_mode_name(term)))
+        elif self._msat_lib.msat_term_is_enum_value(self.msat_env(), term):
+            name = self._msat_lib.msat_decl_get_name(self._msat_lib.msat_term_get_decl(term))
+            res = self.mgr.EnumConstant(name, self._msat_type_to_type(self._msat_lib.msat_term_get_type(term)))
         elif self._msat_lib.msat_term_is_constant(self.msat_env(), term):
             rep = self._restore_empty(self._msat_lib.msat_term_repr(term))
             ty = self._msat_lib.msat_term_get_type(term)
@@ -785,6 +791,8 @@ class MSatConverter(Converter, DagWalker):
                 res = self.mgr.Symbol(rep, types.REAL)
             elif self._msat_lib.msat_is_integer_type(self.msat_env(), ty):
                 res = self.mgr.Symbol(rep, types.INT)
+            elif self._msat_lib.msat_type_repr(ty) in self._enum_types:
+                res = self.mgr.Symbol(rep, self._msat_type_to_type(ty))
             else:
                 check_arr, idx_type, val_type = self._msat_lib.msat_is_array_type(self.msat_env(), ty)
                 if check_arr:
@@ -1136,6 +1144,12 @@ class MSatConverter(Converter, DagWalker):
             self.msat_env(), str(formula.constant_value()),
             formula.fp_exponent_width(), formula.fp_significand_width() - 1)
 
+    def walk_enum_constant(self, formula: FNode, **kwargs) -> Any:
+        # Declaring the type declares its values, which are then found by their names
+        self._type_to_msat(formula.constant_type())
+        decl = self._msat_lib.msat_find_decl(self.msat_env(), formula.constant_value())
+        return self._msat_lib.msat_make_constant(self.msat_env(), decl)
+
     def walk_rm_constant(self, formula: FNode, **kwargs) -> Any:
         makers = {
             "RNE": self._msat_lib.msat_make_fp_roundingmode_nearest_even,
@@ -1290,6 +1304,16 @@ class MSatConverter(Converter, DagWalker):
                                                    fp_type.significand_width - 1)
         elif tp.is_rounding_mode_type():
             return self._msat_lib.msat_get_fp_roundingmode_type(self.msat_env())
+        elif tp.is_enum_type():
+            name = str(tp)
+            if name not in self._enum_types:
+                msat_type = self._msat_lib.msat_get_enum_type(self.msat_env(), name,
+                                                              list(cast(types._EnumType, tp).constructors))
+                if self._msat_lib.MSAT_ERROR_TYPE(msat_type):
+                    msat_msg = self._msat_lib.msat_last_error_message(self.msat_env())
+                    raise InternalSolverError(msat_msg)
+                self._enum_types[name] = (msat_type, tp)
+            return self._enum_types[name][0]
         elif tp.is_custom_type():
             return self._msat_lib.msat_get_simple_type(self.msat_env(), str(tp))
         else:
@@ -1322,6 +1346,11 @@ class MSatConverter(Converter, DagWalker):
                 return self.tm.FPType(exponent_width, mantissa_width + 1)
             if self._msat_lib.msat_is_fp_roundingmode_type(self.msat_env(), tp):
                 return types.ROUNDING_MODE
+
+            # msat_is_enum_type cannot be called from Python, so the enumeration
+            # types are known by the names they were declared with
+            if self._msat_lib.msat_type_repr(tp) in self._enum_types:
+                return self._enum_types[self._msat_lib.msat_type_repr(tp)][1]
 
             # It must be a function type, currently unsupported
             raise NotImplementedError("Function types are unsupported")

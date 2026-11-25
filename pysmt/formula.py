@@ -1154,6 +1154,17 @@ class FormulaManager(object):
         return self.create_node(node_type=op.RM_CONSTANT, args=tuple(),
                                 payload=name)
 
+    def EnumConstant(self, name: str, enum_type: PySMTType) -> FNode:
+        """Returns the value of the given name of the enumeration type."""
+        if not enum_type.is_enum_type():
+            raise PysmtTypeError("%s is not an enumeration type" % enum_type)
+        enum_type = self.env.type_manager.normalize(enum_type)
+        if name not in cast(types._EnumType, enum_type).constructors:
+            raise PysmtValueError("%s is no value of the enumeration type %s"
+                                  % (name, enum_type))
+        return self.create_node(node_type=op.ENUM_CONSTANT, args=tuple(),
+                                payload=(name, enum_type))
+
     def FPAbs(self, formula: FNode) -> FNode:
         return self.create_node(node_type=op.FP_ABS, args=(formula,))
 
